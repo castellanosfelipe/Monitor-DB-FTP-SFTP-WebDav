@@ -1,0 +1,2 @@
+# Dependencias solo de desarrollo/CI — no se empaquetan en dist/.
+pytest==8.3.4

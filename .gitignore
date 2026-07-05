@@ -1,0 +1,21 @@
+# Entornos y caches de Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Datos de runtime (nunca se versionan: contienen secretos cifrados e historial)
+data/
+logs/
+reports/
+
+# Artefactos de build
+dist/
+build/
+*.spec
+
+# SO / editores
+.DS_Store
+.idea/
+.vscode/
