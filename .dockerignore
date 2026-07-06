@@ -1,0 +1,16 @@
+.venv/
+.git/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+data/
+logs/
+reports/
+dist/
+build/
+tests/
+docs/
+*.ps1
+.env
+.env.example
+README.md

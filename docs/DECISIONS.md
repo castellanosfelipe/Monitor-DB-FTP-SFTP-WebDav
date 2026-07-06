@@ -277,3 +277,41 @@ granularidad por sondeo y el backoff durante caídas.
 `/api/connections/{id}/series` promedia la latencia y agrega la
 disponibilidad por bucket (24 h→10 min/1 h; 7 d→1 h/6 h; 30 d→4 h/1 día) en
 lugar de enviar hasta ~43 000 checks crudos de 30 días al navegador.
+
+## Fase 6 — Despliegue y cierre
+
+### D-039 · Las conexiones demo nacen pausadas
+`--demo` (o `MONITOR_DEMO=1`) siembra 6 conexiones con hosts ficticios y 30
+días de historial coherente (checks DOWN dentro de las ventanas de cada
+incidente, con la misma causa). Nacen `enabled=false`: si el scheduler las
+sondeara, llenaría el historial sintético de incidentes reales contra hosts
+inexistentes y arruinaría la demo.
+
+### D-040 · Restore crea conexiones en pausa y nunca duplica
+El backup JSON excluye secretos por diseño (D-007: DPAPI y Fernet no viajan).
+Al importar, cada conexión se crea **pausada** (sin secreto no puede
+autenticar; activarla generaría incidentes falsos) y se omiten las que ya
+existen (misma tupla protocolo+host+puerto+nombre), para que re-importar sea
+idempotente.
+
+### D-041 · Contenedor con uid 1000 y healthcheck sin curl
+`python:3.12-slim` no trae curl: el healthcheck usa `urllib` de la stdlib.
+El usuario no root usa uid 1000 (el uid por defecto en la mayoría de distros)
+para que los volúmenes `./data` y `./reports` montados desde el host sean
+escribibles sin `chown` manual. `MONITOR_DATA_DIR=/app` hace que data/,
+reports/ y logs/ cuelguen del punto de montaje.
+
+### D-042 · build.ps1 corre los tests antes de empaquetar
+El paquete de Modo A solo se genera si `pytest` pasa en la máquina de build.
+Los imports perezosos de la capa Windows (win32crypt, winotify, winsound,
+pystray, PIL) se declaran como `--hidden-import` porque PyInstaller no los ve
+en el grafo estático; `apscheduler` y `oracledb` van con `--collect-submodules`
+(cargan módulos dinámicamente).
+
+### D-043 · Alcance de la verificación final
+Todo lo verificable en este entorno se ejecutó en vivo (ver
+`docs/ACCEPTANCE.md`): Modo B completo con Docker real, los cinco motores de
+BD contra contenedores, cortesía con hilos reales, reporte autocontenido.
+Los criterios intrínsecamente de Windows (autoarranque tras reinicio, doble
+clic en máquina limpia, toasts) quedan cubiertos por diseño y tests
+unitarios con mocks, con un guion de smoke test documentado para el destino.

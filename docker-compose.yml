@@ -1,0 +1,24 @@
+services:
+  monitor:
+    build: .
+    image: stability-monitor:latest
+    container_name: stability-monitor
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      # Los datos (SQLite + secretos cifrados) y los reportes sobreviven a
+      # `docker compose down && up` gracias a estos volúmenes.
+      - ./data:/app/data
+      - ./reports:/app/reports
+    env_file: .env
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; r=urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=4); sys.exit(0 if r.status==200 else 1)"
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3

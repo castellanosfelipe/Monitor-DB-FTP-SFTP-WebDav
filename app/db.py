@@ -191,6 +191,15 @@ class Database:
         self._conn().commit()
         return int(cur.lastrowid)  # type: ignore[arg-type]
 
+    def insert_checks_bulk(self, rows: list[tuple[int, str, str, float | None, str | None, str]]) -> None:
+        """Bulk insert (connection_id, ts_utc, status, latency_ms, error_type, error_msg)."""
+        self._conn().executemany(
+            "INSERT INTO checks (connection_id, ts_utc, status, latency_ms, error_type, error_msg) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+        self._conn().commit()
+
     def list_checks(self, connection_id: int, since_iso: str | None = None) -> list[sqlite3.Row]:
         if since_iso:
             cur = self._conn().execute(

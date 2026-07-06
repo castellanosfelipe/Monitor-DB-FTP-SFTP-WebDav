@@ -19,7 +19,7 @@ Dos modos con la misma base de código:
 | 3 | Dashboard: FastAPI + scheduler, CRUD, probar conexión, estado en vivo, Basic Auth | ✅ |
 | 4 | Alertas: toasts/bandeja/sonido en Windows, SMTP y webhook opcionales, recordatorios, purga nocturna, ajustes desde el dashboard | ✅ |
 | 5 | Gráficas (latencia + timeline, Chart.js local), reportes HTML autocontenidos por cliente, export CSV | ✅ |
-| 6 | Empaquetado (PyInstaller / Docker), modo demo, manual | pendiente |
+| 6 | Empaquetado (PyInstaller + autoarranque / Docker Compose), modo demo, backup/restore, manual de usuario | ✅ |
 
 ## Desarrollo
 
@@ -59,13 +59,29 @@ python -m app.check --file conn.json
 
 Códigos de salida: `0` UP · `1` DEGRADED · `2` DOWN · `3` configuración inválida.
 
-### Generar la clave de cifrado (Modo B)
+### Levantar el dashboard en desarrollo
 
 ```bash
-python -m app.keygen   # imprime una clave para MONITOR_SECRET_KEY
+python -m app.main            # http://127.0.0.1:8090
+python -m app.main --demo     # con datos ficticios de 30 días
+```
+
+## Despliegue
+
+**Modo A (Windows offline)**: `build.ps1` en la máquina con internet →
+copiar `dist\StabilityMonitor\` por USB → `install.ps1` en el destino
+(autoarranque de usuario, sin admin). Detalle en el manual.
+
+**Modo B (Docker)**:
+
+```bash
+cp .env.example .env
+python -m app.keygen          # → MONITOR_SECRET_KEY en .env
+docker compose up -d          # dashboard en :8090 con Basic Auth
 ```
 
 ## Documentación
 
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — manual de usuario en español (ambos modos).
 - [docs/DECISIONS.md](docs/DECISIONS.md) — decisiones de diseño por fase.
-- `docs/USER_GUIDE.md` — manual de usuario (llega en la Fase 6).
+- [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) — pasada final contra los criterios de aceptación.

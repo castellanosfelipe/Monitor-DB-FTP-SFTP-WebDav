@@ -181,6 +181,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
 
 def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="python -m app.main", description="StabilityMonitor")
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="siembra conexiones ficticias con 30 días de historial sintético",
+    )
+    args = parser.parse_args()
+
     mode = runtime_mode()
     setup_logging(mode)
     port = int(os.environ.get("MONITOR_PORT", str(config.DEFAULT_PORT)))
@@ -194,7 +204,14 @@ def main() -> None:
         )
     else:
         host = "127.0.0.1"
-    app = create_app()
+    context = build_context(mode)
+    if args.demo or os.environ.get("MONITOR_DEMO") == "1":
+        from app.demo import seed_demo
+
+        created = seed_demo(context.db)
+        if created:
+            logger.info("modo demo: %d conexiones ficticias sembradas", created)
+    app = create_app(context)
     ctx: AppContext = app.state.ctx
     if mode == "windows" and ctx.engine is not None:
         try:

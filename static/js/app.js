@@ -483,6 +483,22 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btn-settings").addEventListener("click", () => openSettings().catch(() => {}));
   $("btn-settings-cancel").addEventListener("click", () => $("modal-settings").classList.add("hidden"));
   $("settings-form").addEventListener("submit", saveSettings);
+  $("restore-file").addEventListener("change", async (ev) => {
+    const file = ev.target.files[0];
+    if (!file) return;
+    try {
+      const data = JSON.parse(await file.text());
+      const r = await api("/api/restore", { method: "POST", body: JSON.stringify(data) });
+      $("restore-result").textContent =
+        `Creadas ${r.connections_created}, omitidas ${r.connections_skipped}. ${r.warning}`;
+      refresh();
+    } catch (e) {
+      $("restore-result").textContent = "Error: " +
+        (Array.isArray(e.detail) ? e.detail.join("; ") : (e.detail || "archivo inválido"));
+    } finally {
+      ev.target.value = "";
+    }
+  });
   $("btn-cancel").addEventListener("click", () => $("modal-form").classList.add("hidden"));
   $("btn-detail-close").addEventListener("click", () => $("modal-detail").classList.add("hidden"));
   $("conn-form").addEventListener("submit", saveForm);

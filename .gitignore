@@ -9,6 +9,10 @@ __pycache__/
 data/
 logs/
 reports/
+.env
+
+# Entorno de build de Windows
+.venv-build/
 
 # Artefactos de build
 dist/

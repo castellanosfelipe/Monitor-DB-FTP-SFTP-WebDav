@@ -146,6 +146,15 @@
           <label>Nombre de la empresa <input data-key="branding.company"></label>
           <label>Color de acento <input data-key="branding.accent" type="color"></label>
         </div>
+        <h3 class="section-title">Respaldo de configuración</h3>
+        <p class="muted" style="margin:0 0 8px">Los secretos no se exportan (DPAPI y Fernet no son
+          intercambiables): al restaurar en otra máquina deberás reingresarlos y reanudar las conexiones.</p>
+        <div class="modal-actions" style="margin-top:0">
+          <a class="btn small ghost" href="/api/backup" download>⇩ Exportar JSON</a>
+          <label class="btn small ghost" style="margin:0;cursor:pointer">⇧ Importar JSON
+            <input type="file" id="restore-file" accept="application/json" style="display:none"></label>
+          <span id="restore-result" class="muted"></span>
+        </div>
         <div id="settings-errors" class="form-errors hidden"></div>
         <div class="modal-actions">
           <span class="spacer"></span>

@@ -491,6 +491,107 @@ def put_settings(request: Request, payload: dict[str, Any]) -> dict[str, str]:
     return {"status": "ok"}
 
 
+# --- backup / restore de configuración (RF-7) -------------------------------------------
+
+
+@router.get("/backup")
+def export_backup(request: Request) -> Response:
+    """Config export. Secrets are excluded by design (DPAPI/Fernet no viajan)."""
+    import json
+
+    from app import __version__
+    from app.settings_store import DEFAULTS, get_str
+
+    ctx = _ctx(request)
+    settings = {
+        key: get_str(ctx.db, key) for key in DEFAULTS if key != "smtp.password"
+    }
+    connections = []
+    for cfg in ctx.db.list_connections():
+        params = cfg.to_params()
+        params.pop("secret_encrypted", None)
+        params.pop("id", None)
+        connections.append(params)
+    payload = {
+        "app": "StabilityMonitor",
+        "version": __version__,
+        "exported_at": to_iso(utc_now()),
+        "note": "Los secretos no se exportan: deberán reingresarse al restaurar.",
+        "settings": settings,
+        "connections": connections,
+    }
+    return Response(
+        content=json.dumps(payload, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="monitor-backup.json"'},
+    )
+
+
+@router.post("/restore")
+def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+    import json
+
+    from app.models import Protocol
+    from app.settings_store import DEFAULTS
+
+    ctx = _ctx(request)
+    if payload.get("app") != "StabilityMonitor":
+        raise HTTPException(status_code=422, detail=["El archivo no es un backup de StabilityMonitor."])
+
+    applied_settings = 0
+    for key, value in (payload.get("settings") or {}).items():
+        if key in DEFAULTS and key != "smtp.password":
+            ctx.db.set_setting(key, str(value))
+            applied_settings += 1
+
+    existing = {
+        (c.protocol.value, c.host, c.port, c.name) for c in ctx.db.list_connections()
+    }
+    created = 0
+    skipped = 0
+    for item in payload.get("connections") or []:
+        try:
+            cfg = ConnectionConfig(
+                id=None,
+                name=item["name"],
+                client=item.get("client", ""),
+                protocol=Protocol(item["protocol"]),
+                host=item["host"],
+                port=int(item["port"]),
+                username=item.get("username", ""),
+                auth_type=item.get("auth_type", "password"),
+                key_path=item.get("key_path"),
+                db_name=item.get("db_name"),
+                ssl_mode=item.get("ssl_mode", "preferred"),
+                targets=json.loads(item.get("targets_json", "[]")),
+                health_query=item.get("health_query"),
+                interval_s=int(item.get("interval_s", 60)),
+                timeout_s=float(item.get("timeout_s", 10)),
+                retries=int(item.get("retries", 2)),
+                degraded_ms=item.get("degraded_ms"),
+                write_check=bool(item.get("write_check", 0)),
+                enabled=False,  # sin secreto no puede autenticar: nace pausada
+                notes=item.get("notes", ""),
+            )
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=[f"Conexión inválida en el backup: {exc}"])
+        if (cfg.protocol.value, cfg.host, cfg.port, cfg.name) in existing:
+            skipped += 1
+            continue
+        if validate_connection(cfg):
+            skipped += 1
+            continue
+        ctx.db.create_connection(cfg)
+        created += 1
+
+    return {
+        "connections_created": created,
+        "connections_skipped": skipped,
+        "settings_applied": applied_settings,
+        "warning": "Las conexiones restauradas quedan en pausa: reingresa los secretos y reanúdalas.",
+    }
+
+
 # --- pausa global ------------------------------------------------------------------------
 
 
