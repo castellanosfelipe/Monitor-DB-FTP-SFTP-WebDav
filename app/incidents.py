@@ -59,6 +59,11 @@ class _ConnState:
     incident_started_at: datetime | None = None
     stable_status: Status | None = None  # status with hysteresis applied
     last_raw_status: Status | None = None
+    # Seeded only from the incidents table (fresh process); the failure streak
+    # still needs to be rebuilt from the checks history the first time the
+    # connection is touched — required for serverless, where every invocation
+    # may be a new process.
+    needs_rebuild: bool = False
 
 
 class IncidentTracker:
@@ -80,8 +85,54 @@ class IncidentTracker:
                 first_error=(row["error_type"], row["first_error_msg"]),
                 stable_status=Status.DOWN,
                 last_raw_status=Status.DOWN,
+                needs_rebuild=True,
             )
             self._states[row["connection_id"]] = state
+
+    def _state_for(self, cfg: ConnectionConfig) -> _ConnState:
+        """State for a connection, rebuilt from the checks history when this
+        process has not seen it yet (restart mid-streak, serverless invocation)."""
+        assert cfg.id is not None
+        state = self._states.get(cfg.id)
+        if state is None:
+            state = _ConnState(needs_rebuild=True)
+            self._states[cfg.id] = state
+        if state.needs_rebuild:
+            self._rebuild_from_history(cfg, state)
+            state.needs_rebuild = False
+        return state
+
+    def _rebuild_from_history(self, cfg: ConnectionConfig, state: _ConnState) -> None:
+        limit = max(cfg.retries + 2, 25)
+        recent = self._db.list_recent_checks(cfg.id, limit)  # newest first
+        streak: list = []
+        status_before_streak: Status | None = None
+        for row in recent:
+            if row["status"] == Status.DOWN.value:
+                streak.append(row)
+            else:
+                status_before_streak = Status(row["status"])
+                break
+        if recent:
+            state.last_raw_status = Status(recent[0]["status"])
+        state.consecutive_failures = max(state.consecutive_failures, len(streak))
+        if streak:
+            oldest = streak[-1]
+            rebuilt_first = from_iso(oldest["ts_utc"])
+            if state.first_failure_at is None or rebuilt_first < state.first_failure_at:
+                state.first_failure_at = rebuilt_first
+            if state.first_error == (None, ""):
+                state.first_error = (oldest["error_type"], oldest["error_msg"])
+        if state.confirmed_down:
+            # Backoff exponent: failed checks beyond the confirmation point.
+            state.failures_after_confirm = max(
+                1, state.consecutive_failures - (cfg.retries + 1) + 1
+            )
+        elif not streak:
+            state.stable_status = status_before_streak or state.stable_status
+        else:
+            # Unconfirmed streak: visible status is the last non-DOWN one.
+            state.stable_status = status_before_streak
 
     def record(
         self, cfg: ConnectionConfig, result: CheckResult, ts: datetime | None = None
@@ -91,6 +142,9 @@ class IncidentTracker:
             raise ValueError("connection must be persisted before recording checks")
         ts = ts or utc_now()
         with self._lock:
+            # Rebuild (if needed) BEFORE persisting this check, so the current
+            # result is never double-counted in the streak.
+            state = self._state_for(cfg)
             self._db.insert_check(
                 connection_id=cfg.id,
                 ts_utc=to_iso(ts),
@@ -99,7 +153,6 @@ class IncidentTracker:
                 error_type=result.error_type.value if result.error_type else None,
                 error_msg=truncate(result.error_msg or ""),
             )
-            state = self._states.setdefault(cfg.id, _ConnState())
             events: list[IncidentEvent] = []
 
             if result.status is Status.DOWN:

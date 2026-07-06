@@ -56,10 +56,11 @@ class AppContext:
 def resolve_auth(mode: str) -> DashboardAuth:
     user = os.environ.get("MONITOR_DASH_USER", "")
     password = os.environ.get("MONITOR_DASH_PASS", "")
-    if mode == "docker":
+    if mode in ("docker", "serverless"):
+        # Expuesto a red (o a internet): la autenticación es obligatoria.
         if not user or not password:
             raise RuntimeError(
-                "En modo Docker el dashboard exige autenticación: define "
+                f"En modo {mode} el dashboard exige autenticación: define "
                 "MONITOR_DASH_USER y MONITOR_DASH_PASS en el entorno."
             )
         return DashboardAuth(enabled=True, username=user, password=password)
@@ -70,7 +71,19 @@ def resolve_auth(mode: str) -> DashboardAuth:
 
 def build_context(mode: str | None = None, with_engine: bool = True) -> AppContext:
     mode = mode or runtime_mode()
-    db = Database(config.db_path())
+    if mode == "serverless":
+        from app.db_pg import PgDatabase
+
+        dsn = os.environ.get("DATABASE_URL", "").strip()
+        if not dsn:
+            raise RuntimeError(
+                "En modo serverless se requiere DATABASE_URL (cadena de conexión "
+                "de Neon/PostgreSQL)."
+            )
+        db: Database = PgDatabase(dsn)  # type: ignore[assignment]
+        with_engine = False  # sin scheduler residente: los chequeos van por cron
+    else:
+        db = Database(config.db_path())
     tracker = IncidentTracker(db)
     throttle = Throttle(courtesy_policy(db))
     try:
@@ -176,6 +189,28 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         if engine is None or engine.is_alive():
             return JSONResponse({"status": "ok", "version": __version__})
         return JSONResponse({"status": "scheduler caído"}, status_code=503)
+
+    @app.api_route("/api/cron/tick", methods=["GET", "POST"])
+    def cron_tick(request: Request) -> Response:
+        """Serverless check runner (Vercel Cron o un scheduler externo).
+
+        Protegido por ``CRON_SECRET`` (header ``Authorization: Bearer <secreto>``,
+        que Vercel envía automáticamente a sus crons). Sin secreto configurado
+        solo se permite fuera de serverless (desarrollo local).
+        """
+        secret = os.environ.get("CRON_SECRET", "")
+        if secret:
+            provided = request.headers.get("authorization", "")
+            if not pysecrets.compare_digest(provided, f"Bearer {secret}"):
+                raise HTTPException(status_code=401, detail="Credenciales requeridas.")
+        elif app.state.ctx.mode == "serverless":
+            raise HTTPException(
+                status_code=503,
+                detail="Define CRON_SECRET para habilitar el tick de chequeos.",
+            )
+        from app.serverless import run_due_checks
+
+        return JSONResponse(run_due_checks(app.state.ctx))
 
     return app
 

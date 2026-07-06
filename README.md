@@ -80,6 +80,11 @@ python -m app.keygen          # → MONITOR_SECRET_KEY en .env
 docker compose up -d          # dashboard en :8090 con Basic Auth
 ```
 
+**Modo serverless (Vercel + Neon)** — para monitorear servidores *públicos*
+sin infraestructura propia; los chequeos los dispara un cron externo contra
+`/api/cron/tick`. Desplegado en producción; guía completa y límites en
+[docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md).
+
 ## Documentación
 
 - [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — manual de usuario en español (ambos modos).

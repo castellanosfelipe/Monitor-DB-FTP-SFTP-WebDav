@@ -24,6 +24,10 @@ def base_dir() -> Path:
         return Path(env)
     if getattr(sys, "frozen", False):  # PyInstaller onedir bundle
         return Path(sys.executable).resolve().parent
+    if os.environ.get("VERCEL"):
+        # Serverless: el bundle es de solo lectura; lo efímero va a /tmp
+        # (la persistencia real vive en Postgres/Neon).
+        return Path("/tmp/stability-monitor")
     return Path(__file__).resolve().parent.parent
 
 

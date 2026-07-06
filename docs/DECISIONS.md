@@ -308,6 +308,41 @@ pystray, PIL) se declaran como `--hidden-import` porque PyInstaller no los ve
 en el grafo estático; `apscheduler` y `oracledb` van con `--collect-submodules`
 (cargan módulos dinámicamente).
 
+## Post-cierre — Modo serverless (Vercel + Neon)
+
+### D-044 · Tercer modo de despliegue, a petición y con desviaciones explícitas
+La especificación original prohíbe bases de datos con servidor para la
+persistencia propia y define dos modos; el despliegue en Vercel + Neon se
+agregó después **a petición del usuario**. Desviaciones aceptadas y
+documentadas en `docs/DEPLOY_VERCEL.md`: persistencia en PostgreSQL (Neon),
+runtime en internet (solo puede monitorear servidores públicos, no LAN) y
+chequeos disparados por un planificador externo en lugar de APScheduler.
+Los Modos A y B quedan intactos (SQLite, misma base de código).
+
+### D-045 · Chequeos por tick con presupuesto de tiempo
+Sin proceso residente, `/api/cron/tick` (protegido con `CRON_SECRET` por
+header Bearer) ejecuta los chequeos vencidos —los más atrasados primero—
+hasta agotar un presupuesto de ~45 s (< maxDuration de la función); el resto
+se difiere al siguiente tick. El plan Hobby de Vercel limita sus crons a una
+vez al día, así que el planificador principal es un workflow de GitHub
+Actions cada 5 min (en Pro basta cambiar `vercel.json` a `* * * * *`).
+
+### D-046 · Máquina de incidentes sin memoria de proceso
+Cada invocación serverless puede ser un proceso nuevo, así que el
+`IncidentTracker` reconstruye su estado desde la BD de forma perezosa: racha
+de fallos consecutivos (cola de checks DOWN), primer fallo y exponente de
+backoff se derivan del historial. Esto además arregla un caso real de los
+modos A/B: un reinicio a mitad de racha no confirmada ya no pierde los fallos
+previos (test `test_tracker_rebuilds_unconfirmed_streak_after_restart`).
+
+### D-047 · PgDatabase como gemelo de contrato
+`app/db_pg.py` implementa el mismo contrato público que `Database` (filas
+tipo dict, `execute()` traduciendo placeholders `?`, timestamps ISO TEXT) en
+lugar de introducir un ORM o refactorizar la capa SQLite estable. Diferencias
+de dialecto encapsuladas: `RETURNING id`, `COUNT(*) FILTER`, upsert. Contrato
+verificado con la misma batería contra Postgres real (contenedor) y smoke
+contra Neon con TLS.
+
 ### D-043 · Alcance de la verificación final
 Todo lo verificable en este entorno se ejecutó en vivo (ver
 `docs/ACCEPTANCE.md`): Modo B completo con Docker real, los cinco motores de

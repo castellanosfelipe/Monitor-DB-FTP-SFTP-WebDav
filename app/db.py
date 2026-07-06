@@ -212,6 +212,13 @@ class Database:
             )
         return list(cur)
 
+    def list_recent_checks(self, connection_id: int, limit: int = 25) -> list[sqlite3.Row]:
+        cur = self._conn().execute(
+            "SELECT * FROM checks WHERE connection_id = ? ORDER BY id DESC LIMIT ?",
+            (connection_id, limit),
+        )
+        return list(cur)
+
     def purge_old_checks(self, before_iso: str) -> int:
         cur = self._conn().execute("DELETE FROM checks WHERE ts_utc < ?", (before_iso,))
         self._conn().commit()
