@@ -5,25 +5,28 @@ Monitor de disponibilidad **de bajo impacto** para servidores de archivos
 SQL Server, Oracle), con historial de conectividad, incidentes, alertas y
 reportes de estabilidad para clientes.
 
-Dos modos con la misma base de código:
+Se despliega como **ejecutable portable para Windows 10 Pro x64, 100 % offline**:
+un `dist/` copiable por USB que no requiere instalar Python ni nada en la
+máquina destino, sin ninguna dependencia de internet en tiempo de ejecución.
 
-- **Modo A** — Windows 10 Pro x64, 100 % offline (ejecutable portable, PyInstaller).
-- **Modo B** — Docker Compose (online, dashboard con HTTP Basic).
+## Capacidades
 
-## Estado
-
-| Fase | Contenido | Estado |
-|---|---|---|
-| 1 | Núcleo: modelo de datos, checkers FTP/FTPS/SFTP/WebDAV(S), clasificación de errores, política de cortesía, máquina de incidentes, CLI | ✅ |
-| 2 | Checkers de bases de datos (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle thin) probados contra contenedores reales | ✅ |
-| 3 | Dashboard: FastAPI + scheduler, CRUD, probar conexión, estado en vivo, Basic Auth | ✅ |
-| 4 | Alertas: toasts/bandeja/sonido en Windows, SMTP y webhook opcionales, recordatorios, purga nocturna, ajustes desde el dashboard | ✅ |
-| 5 | Gráficas (latencia + timeline, Chart.js local), reportes HTML autocontenidos por cliente, export CSV | ✅ |
-| 6 | Empaquetado (PyInstaller + autoarranque / Docker Compose), modo demo, backup/restore, manual de usuario | ✅ |
+- **Checkers** de FTP/FTPS/SFTP/WebDAV(S) y PostgreSQL/MySQL/MariaDB/SQL Server/
+  Oracle (drivers en Python puro), con verificación de rutas y tablas concretas.
+- **Política de cortesía** (el monitor nunca sobrecarga lo que vigila): una sola
+  sesión por host, espaciado, jitter, rate limit y backoff durante caídas.
+- **Incidentes y alertas**: máquina de estados con histéresis, una alerta por
+  incidente (toast nativa + sonido + ícono de bandeja en Windows; SMTP/webhook
+  opcionales hacia la LAN), recuperación con duración.
+- **Dashboard local** (FastAPI en `127.0.0.1:8090`): CRUD de conexiones, probar
+  conexión, estado en vivo, gráficas de latencia y disponibilidad.
+- **Reportes** HTML autocontenidos por cliente + export CSV.
+- **Modo demo** (`--demo`) con 30 días de historial sintético.
 
 ## Desarrollo
 
-Requiere Python 3.12.
+El build se hace en una máquina con internet (aquí, cualquier SO con Python
+3.12); el artefacto final se traslada a Windows. Para desarrollar y probar:
 
 ```bash
 python3.12 -m venv .venv
@@ -32,7 +35,14 @@ python3.12 -m venv .venv
 MONITOR_IT=1 .venv/bin/python -m pytest tests/integration   # requiere contenedores (ver docstring)
 ```
 
-### Probar un chequeo puntual (CLI de la Fase 1)
+### Levantar el dashboard en desarrollo
+
+```bash
+python -m app.main            # http://127.0.0.1:8090
+python -m app.main --demo     # con datos ficticios de 30 días
+```
+
+### Probar un chequeo puntual (CLI)
 
 Contra una conexión guardada en `data/monitor.db`:
 
@@ -59,34 +69,26 @@ python -m app.check --file conn.json
 
 Códigos de salida: `0` UP · `1` DEGRADED · `2` DOWN · `3` configuración inválida.
 
-### Levantar el dashboard en desarrollo
+## Empaquetado y despliegue (Windows offline)
 
-```bash
-python -m app.main            # http://127.0.0.1:8090
-python -m app.main --demo     # con datos ficticios de 30 días
+En la máquina de desarrollo (con internet):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build.ps1   # → dist\StabilityMonitor\ (PyInstaller onedir)
 ```
 
-## Despliegue
+En la máquina Windows destino (sin internet, sin admin):
 
-**Modo A (Windows offline)**: `build.ps1` en la máquina con internet →
-copiar `dist\StabilityMonitor\` por USB → `install.ps1` en el destino
-(autoarranque de usuario, sin admin). Detalle en el manual.
-
-**Modo B (Docker)**:
-
-```bash
-cp .env.example .env
-python -m app.keygen          # → MONITOR_SECRET_KEY en .env
-docker compose up -d          # dashboard en :8090 con Basic Auth
+```powershell
+# tras copiar dist\StabilityMonitor\ por USB, dentro de esa carpeta:
+powershell -ExecutionPolicy Bypass -File .\install.ps1  # autoarranque de usuario + inicia la app
 ```
 
-**Modo serverless (Vercel + Neon)** — para monitorear servidores *públicos*
-sin infraestructura propia; los chequeos los dispara un cron externo contra
-`/api/cron/tick`. Desplegado en producción; guía completa y límites en
-[docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md).
+El dashboard queda en `http://127.0.0.1:8090` y el ícono aparece en la bandeja.
+Guía completa en [docs/USER_GUIDE.md](docs/USER_GUIDE.md).
 
 ## Documentación
 
-- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — manual de usuario en español (ambos modos).
-- [docs/DECISIONS.md](docs/DECISIONS.md) — decisiones de diseño por fase.
-- [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) — pasada final contra los criterios de aceptación.
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — manual de usuario en español.
+- [docs/DECISIONS.md](docs/DECISIONS.md) — decisiones de diseño.
+- [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md) — criterios de aceptación.

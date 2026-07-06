@@ -1,11 +1,9 @@
-"""FastAPI application: dashboard, API, healthz, scheduler lifecycle.
+"""FastAPI application: dashboard, API, healthz, scheduler lifecycle (Modo A).
 
-Modes (see docs):
-- windows/dev: binds 127.0.0.1; Basic Auth optional (only if MONITOR_DASH_USER
-  and MONITOR_DASH_PASS are set). Set MONITOR_BIND_LAN=1 to listen on the LAN
-  (a warning is logged: enable auth!).
-- docker: binds 0.0.0.0 and Basic Auth is mandatory — the app refuses to start
-  without MONITOR_DASH_USER / MONITOR_DASH_PASS.
+El dashboard escucha en ``127.0.0.1`` (solo la máquina local). La autenticación
+HTTP Basic es opcional y se activa definiendo ``MONITOR_DASH_USER`` /
+``MONITOR_DASH_PASS``. Con ``MONITOR_BIND_LAN=1`` escucha en toda la LAN, en
+cuyo caso conviene activar la autenticación (se registra una advertencia).
 """
 from __future__ import annotations
 
@@ -53,17 +51,10 @@ class AppContext:
     notifier: Notifier | None = None
 
 
-def resolve_auth(mode: str) -> DashboardAuth:
+def resolve_auth() -> DashboardAuth:
+    """Basic Auth opcional: activa solo si hay usuario y contraseña definidos."""
     user = os.environ.get("MONITOR_DASH_USER", "")
     password = os.environ.get("MONITOR_DASH_PASS", "")
-    if mode in ("docker", "serverless"):
-        # Expuesto a red (o a internet): la autenticación es obligatoria.
-        if not user or not password:
-            raise RuntimeError(
-                f"En modo {mode} el dashboard exige autenticación: define "
-                "MONITOR_DASH_USER y MONITOR_DASH_PASS en el entorno."
-            )
-        return DashboardAuth(enabled=True, username=user, password=password)
     if user and password:
         return DashboardAuth(enabled=True, username=user, password=password)
     return DashboardAuth(enabled=False)
@@ -71,26 +62,12 @@ def resolve_auth(mode: str) -> DashboardAuth:
 
 def build_context(mode: str | None = None, with_engine: bool = True) -> AppContext:
     mode = mode or runtime_mode()
-    if mode == "serverless":
-        from app.db_pg import PgDatabase
-
-        dsn = os.environ.get("DATABASE_URL", "").strip()
-        if not dsn:
-            raise RuntimeError(
-                "En modo serverless se requiere DATABASE_URL (cadena de conexión "
-                "de Neon/PostgreSQL)."
-            )
-        db: Database = PgDatabase(dsn)  # type: ignore[assignment]
-        with_engine = False  # sin scheduler residente: los chequeos van por cron
-    else:
-        db = Database(config.db_path())
+    db = Database(config.db_path())
     tracker = IncidentTracker(db)
     throttle = Throttle(courtesy_policy(db))
     try:
         secret_store: SecretStore | None = get_secret_store(mode)
     except SecretStoreError as exc:
-        if mode == "docker":
-            raise
         logger.warning("almacén de secretos no disponible: %s", exc)
         secret_store = None
     if mode == "windows":
@@ -118,7 +95,7 @@ def build_context(mode: str | None = None, with_engine: bool = True) -> AppConte
         throttle=throttle,
         engine=engine,
         secret_store=secret_store,
-        auth=resolve_auth(mode),
+        auth=resolve_auth(),
         mode=mode,
         alerter=alerter,
         notifier=notifier,
@@ -184,33 +161,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
 
     @app.get("/healthz")
     def healthz() -> Response:
-        # No auth: used by the Docker healthcheck. Reveals liveness only.
+        # Sin auth: sonda de vida del scheduler (útil para la bandeja/diagnóstico).
         engine = app.state.ctx.engine
         if engine is None or engine.is_alive():
             return JSONResponse({"status": "ok", "version": __version__})
         return JSONResponse({"status": "scheduler caído"}, status_code=503)
-
-    @app.api_route("/api/cron/tick", methods=["GET", "POST"])
-    def cron_tick(request: Request) -> Response:
-        """Serverless check runner (Vercel Cron o un scheduler externo).
-
-        Protegido por ``CRON_SECRET`` (header ``Authorization: Bearer <secreto>``,
-        que Vercel envía automáticamente a sus crons). Sin secreto configurado
-        solo se permite fuera de serverless (desarrollo local).
-        """
-        secret = os.environ.get("CRON_SECRET", "")
-        if secret:
-            provided = request.headers.get("authorization", "")
-            if not pysecrets.compare_digest(provided, f"Bearer {secret}"):
-                raise HTTPException(status_code=401, detail="Credenciales requeridas.")
-        elif app.state.ctx.mode == "serverless":
-            raise HTTPException(
-                status_code=503,
-                detail="Define CRON_SECRET para habilitar el tick de chequeos.",
-            )
-        from app.serverless import run_due_checks
-
-        return JSONResponse(run_due_checks(app.state.ctx))
 
     return app
 
@@ -229,9 +184,7 @@ def main() -> None:
     mode = runtime_mode()
     setup_logging(mode)
     port = int(os.environ.get("MONITOR_PORT", str(config.DEFAULT_PORT)))
-    if mode == "docker":
-        host = "0.0.0.0"
-    elif os.environ.get("MONITOR_BIND_LAN") == "1":
+    if os.environ.get("MONITOR_BIND_LAN") == "1":
         host = "0.0.0.0"
         logger.warning(
             "El dashboard escuchará en toda la LAN. Configura MONITOR_DASH_USER/"

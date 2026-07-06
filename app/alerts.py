@@ -57,7 +57,7 @@ class Notifier(TypingProtocol):
 
 
 class HeadlessNotifier:
-    """Docker/dev: the alert is visible via logs, alerts_log and the dashboard."""
+    """Fallback (dev/CI, no-Windows): la alerta queda en logs, alerts_log y el banner."""
 
     channel = "log"
 

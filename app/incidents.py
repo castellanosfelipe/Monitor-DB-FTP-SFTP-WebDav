@@ -59,10 +59,10 @@ class _ConnState:
     incident_started_at: datetime | None = None
     stable_status: Status | None = None  # status with hysteresis applied
     last_raw_status: Status | None = None
-    # Seeded only from the incidents table (fresh process); the failure streak
-    # still needs to be rebuilt from the checks history the first time the
-    # connection is touched — required for serverless, where every invocation
-    # may be a new process.
+    # Seeded only from the incidents table on startup; the failure streak still
+    # needs to be rebuilt from the checks history the first time the connection
+    # is touched — so an app restart mid-outage (Modo A: arranque tras reiniciar
+    # Windows) neither loses the prior failures nor re-alerts.
     needs_rebuild: bool = False
 
 
@@ -91,7 +91,7 @@ class IncidentTracker:
 
     def _state_for(self, cfg: ConnectionConfig) -> _ConnState:
         """State for a connection, rebuilt from the checks history when this
-        process has not seen it yet (restart mid-streak, serverless invocation)."""
+        process has not seen it yet (app restart mid-streak)."""
         assert cfg.id is not None
         state = self._states.get(cfg.id)
         if state is None:
@@ -215,21 +215,6 @@ class IncidentTracker:
             return events
 
     # --- read side (dashboard / scheduler) -----------------------------------
-
-    def hydrate(self, cfg: ConnectionConfig) -> None:
-        """Ensure this connection's streak state is rebuilt from history.
-
-        Required before querying :meth:`is_confirmed_down` /
-        :meth:`failures_since_confirm` in a *fresh* process (serverless): the
-        lazy rebuild otherwise only runs inside :meth:`record`, so a scheduling
-        decision made before the first ``record`` of the process would use the
-        stale seed (``failures_after_confirm == 1``) and the backoff would never
-        escalate past ``interval × 2`` during a sustained outage.
-        """
-        if cfg.id is None:
-            return
-        with self._lock:
-            self._state_for(cfg)
 
     def status_of(self, connection_id: int) -> Status | None:
         """Connection status with hysteresis: unconfirmed failures don't flip it."""

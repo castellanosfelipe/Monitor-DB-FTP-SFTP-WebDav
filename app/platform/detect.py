@@ -1,29 +1,23 @@
-"""Runtime mode detection.
+"""Runtime mode detection (Modo A).
 
 Modes:
-- ``windows``:    Modo A (portable, DPAPI, tray/toasts).
-- ``docker``:     Modo B (headless, Fernet with mandatory ``MONITOR_SECRET_KEY``).
-- ``serverless``: Vercel + Neon — no long-running scheduler; checks run inside
-  cron-triggered invocations against PostgreSQL storage.
-- ``dev``:        implicit fallback for development on non-Windows machines
-  outside a container; behaves like ``docker`` except the Fernet key may live
-  in a local keyfile.
+- ``windows``: Windows portable, offline (DPAPI, bandeja/toasts). El objetivo.
+- ``dev``:     máquina de desarrollo/CI no-Windows (build y tests). Se comporta
+  como Windows salvo por el almacén de secretos (Fernet con keyfile local, ya
+  que DPAPI solo existe en Windows).
+
+Forzable con ``MONITOR_MODE=windows`` (útil para probar la ruta DPAPI en CI con
+mocks). Fuera de eso, la plataforma decide.
 """
 from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
 
 
 def runtime_mode() -> str:
-    forced = os.environ.get("MONITOR_MODE", "").strip().lower()
-    if forced in ("windows", "docker", "serverless"):
-        return forced
-    if os.environ.get("VERCEL"):
-        return "serverless"
+    if os.environ.get("MONITOR_MODE", "").strip().lower() == "windows":
+        return "windows"
     if sys.platform == "win32":
         return "windows"
-    if Path("/.dockerenv").exists():
-        return "docker"
     return "dev"

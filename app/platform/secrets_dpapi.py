@@ -34,8 +34,8 @@ class DpapiSecretStore:
     def decrypt(self, token: str) -> str:
         if token.startswith("fernet:"):
             raise SecretStoreError(
-                "Este secreto fue cifrado con Fernet (modo Docker) y no puede "
-                "descifrarse aquí; vuelve a ingresar la credencial."
+                "Este secreto fue cifrado con Fernet (entorno de desarrollo) y no "
+                "puede descifrarse aquí; vuelve a ingresar la credencial."
             )
         if not token.startswith(self.PREFIX):
             raise SecretStoreError("Formato de secreto no reconocido; vuelve a ingresar la credencial.")

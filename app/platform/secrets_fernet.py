@@ -1,8 +1,9 @@
-"""Fernet-based secret store (Modo B / desarrollo).
+"""Fernet-based secret store — backend de desarrollo/CI (no-Windows).
 
-In docker mode the key MUST come from ``MONITOR_SECRET_KEY`` — without it the
-stored secrets are unrecoverable by design (acceptance criterion). Only in dev
-mode a local keyfile (``data/secret.key``) is generated for convenience.
+En la máquina destino (Windows) los secretos usan DPAPI; este backend existe
+solo para poder correr y probar la app fuera de Windows, donde DPAPI no está
+disponible. La clave se toma de ``MONITOR_SECRET_KEY`` si está definida; si no,
+se genera y persiste automáticamente un keyfile local (``data/secret.key``).
 """
 from __future__ import annotations
 
@@ -27,8 +28,8 @@ class FernetSecretStore:
             self._fernet = Fernet(key)
         except Exception as exc:
             raise SecretStoreError(
-                "MONITOR_SECRET_KEY no es una clave Fernet válida; "
-                "genera una con: python -m app.keygen"
+                "MONITOR_SECRET_KEY no es una clave Fernet válida; genera una con: "
+                "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
             ) from exc
 
     @staticmethod
@@ -49,9 +50,7 @@ class FernetSecretStore:
             path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0o600
             return cls(key)
         raise SecretStoreError(
-            "MONITOR_SECRET_KEY no está definida. Genera una clave con "
-            "'python -m app.keygen' y expórtala en el entorno; sin ella los "
-            "secretos guardados son irrecuperables."
+            "MONITOR_SECRET_KEY no está definida y no se permite keyfile local."
         )
 
     def encrypt(self, plain: str) -> str:

@@ -123,6 +123,22 @@ def test_backoff_exponent_counts_from_confirmation(db, cfg):
     assert tracker.failures_since_confirm(cfg.id) == 0  # reset on recovery
 
 
+def test_rebuilds_unconfirmed_streak_after_restart(db, cfg):
+    """Un reinicio a mitad de una racha NO confirmada no pierde los fallos
+    previos: el tracker los reconstruye desde el historial de checks. Cubre el
+    caso real de Modo A: la app arranca sola tras reiniciar Windows."""
+    tracker1 = IncidentTracker(db)
+    tracker1.record(cfg, up(), at(0))
+    tracker1.record(cfg, down(), at(1))
+    tracker1.record(cfg, down(), at(2))  # 2 fallos: retries=2 aún no confirma
+    assert db.list_open_incidents() == []
+
+    tracker2 = IncidentTracker(db)  # reinicio de la app
+    events = tracker2.record(cfg, down(), at(3))
+    assert len(events) == 1 and isinstance(events[0], IncidentOpened)
+    assert events[0].started_at == at(1)  # primer fallo de la racha, desde la BD
+
+
 def test_tracker_recovers_open_incident_after_restart(db, cfg):
     tracker = IncidentTracker(db)
     for minute in range(3):

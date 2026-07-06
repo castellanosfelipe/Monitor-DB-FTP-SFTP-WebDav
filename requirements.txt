@@ -1,26 +1,25 @@
-# Runtime dependencies — exact pins (Modo A se empaqueta offline con PyInstaller).
-# La Fase 1 usa: paramiko, httpx, cryptography. El resto queda fijado desde ya
-# para que el lockfile no cambie entre fases.
+# Runtime dependencies — versiones fijadas. Se empaqueta offline con PyInstaller
+# (Modo A: ejecutable portable para Windows sin internet).
 
+# Dashboard local (127.0.0.1) + planificador de chequeos
 fastapi==0.115.8
 uvicorn==0.34.0
 APScheduler==3.11.0
-jinja2==3.1.6
 
-# Protocolos de archivos
+# Protocolos de archivos (FTP/FTPS por stdlib; SFTP y WebDAV aquí)
 paramiko==3.5.1
 httpx==0.28.1
 
-# Drivers de bases de datos (thin / Python puro)
+# Drivers de bases de datos monitoreadas (thin / Python puro)
 pg8000==1.31.2
 PyMySQL==1.1.1
 python-tds==1.16.0
 oracledb==2.5.1
 
-# Secretos
+# Cifrado de secretos: DPAPI en Windows (pywin32); Fernet solo en dev/CI no-Windows
 cryptography==44.0.2
 
-# Solo Windows (Modo A)
+# Solo Windows (DPAPI + toasts + bandeja + ícono)
 pywin32==308; sys_platform == "win32"
 winotify==1.1.0; sys_platform == "win32"
 pystray==0.19.5; sys_platform == "win32"

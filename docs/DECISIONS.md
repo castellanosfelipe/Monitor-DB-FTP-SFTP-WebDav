@@ -350,3 +350,40 @@ BD contra contenedores, cortesía con hilos reales, reporte autocontenido.
 Los criterios intrínsecamente de Windows (autoarranque tras reinicio, doble
 clic en máquina limpia, toasts) quedan cubiertos por diseño y tests
 unitarios con mocks, con un guion de smoke test documentado para el destino.
+
+## Post-cierre — Reducción a Modo A (Windows offline) únicamente
+
+### D-048 · Eliminación de Modo B (Docker) y del modo serverless (Vercel + Neon)
+El proyecto se acotó a su único objetivo real: un ejecutable portable para una
+máquina **Windows sin internet**. Se eliminaron los archivos y el código que
+solo servían a los otros dos modos de despliegue:
+
+- **Docker**: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`.
+- **Serverless**: `api/`, `vercel.json`, `.vercelignore`, el workflow de GitHub
+  Actions, `app/db_pg.py` (persistencia PostgreSQL/Neon), `app/serverless.py`
+  (runner por cron) y `docs/DEPLOY_VERCEL.md`.
+- `app/keygen.py`: su único propósito era generar `MONITOR_SECRET_KEY` para
+  Docker; en Windows los secretos usan DPAPI, que no requiere clave.
+- Ramas de código por modo en `main.py`, `detect.py`, `config.py` y
+  `logging_setup.py`; el endpoint `/api/cron/tick`; y el método
+  `IncidentTracker.hydrate()` (solo lo usaba el runner serverless).
+
+**Qué se conservó y por qué:**
+- Los **drivers de BD** (`pg8000`, PyMySQL, python-tds, oracledb) siguen: son
+  los *checkers* que monitorean esas bases, funcionalidad central de Modo A.
+  `pg8000` lo usaban dos cosas distintas (el checker y el adaptador Neon); solo
+  se fue el adaptador.
+- **Fernet** (`secrets_fernet.py`) se mantiene como backend de secretos **solo
+  para desarrollo/CI no-Windows** (permite correr y probar la app fuera de
+  Windows, donde DPAPI no existe). En el ejecutable Windows nunca se usa.
+- La **reconstrucción de estado desde el historial** en `IncidentTracker`
+  (originalmente motivada por serverless) se queda: resuelve un caso real de
+  Modo A — que la app, al arrancar sola tras reiniciar Windows a mitad de una
+  racha de fallos, no pierda los fallos previos ni re-alerte. Cubierta por
+  `test_rebuilds_unconfirmed_streak_after_restart`.
+- Se quitó `jinja2` de las dependencias (las plantillas se sirven como archivo
+  estático, sin renderizado Jinja).
+
+La autenticación del dashboard pasa a ser **opcional** (el dashboard escucha en
+`127.0.0.1`); se activa solo si se definen `MONITOR_DASH_USER`/`MONITOR_DASH_PASS`,
+o al exponer a la LAN con `MONITOR_BIND_LAN=1`.

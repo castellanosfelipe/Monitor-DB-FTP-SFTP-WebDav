@@ -15,20 +15,19 @@ de estabilidad listos para enviar a tus clientes.
 
 ## Índice
 
-1. [Modo A — Windows 10 Pro sin internet](#modo-a)
-2. [Modo B — Docker Compose](#modo-b)
-3. [Uso del dashboard](#dashboard)
-4. [Conexiones: campos y ejemplos](#conexiones)
-5. [Alertas](#alertas)
-6. [Reportes de estabilidad](#reportes)
-7. [Ajustes y respaldo de configuración](#ajustes)
-8. [Modo demo](#demo)
-9. [Solución de problemas](#problemas)
+1. [Instalación — Windows 10 Pro sin internet](#modo-a)
+2. [Uso del dashboard](#dashboard)
+3. [Conexiones: campos y ejemplos](#conexiones)
+4. [Alertas](#alertas)
+5. [Reportes de estabilidad](#reportes)
+6. [Ajustes y respaldo de configuración](#ajustes)
+7. [Modo demo](#demo)
+8. [Solución de problemas](#problemas)
 
 ---
 
 <a name="modo-a"></a>
-## 1. Modo A — Windows 10 Pro x64, 100 % offline
+## 1. Instalación — Windows 10 Pro x64, 100 % offline
 
 La máquina destino **no necesita internet ni Python**, y no hacen falta
 permisos de administrador. El paquete se construye una vez en una máquina de
@@ -65,7 +64,7 @@ desarrollo con internet y se traslada por USB o red interna.
 3. Abre el dashboard: **http://127.0.0.1:8090** (o doble clic en el ícono de
    la bandeja del sistema).
 
-Notas del Modo A:
+Notas:
 
 - El dashboard solo escucha en `127.0.0.1`. Para exponerlo a la LAN, define
   las variables de entorno `MONITOR_BIND_LAN=1` **y** `MONITOR_DASH_USER` /
@@ -79,36 +78,8 @@ Notas del Modo A:
   pendientes se ejecutan al despertar y se reprograman con normalidad).
 - Para desinstalar: `uninstall.ps1` (quita el autoarranque; los datos quedan).
 
-<a name="modo-b"></a>
-## 2. Modo B — Docker Compose
-
-```bash
-# 1. copia y completa las variables
-cp .env.example .env
-
-# 2. genera la clave de cifrado de secretos y pégala en .env
-docker compose run --rm monitor python -m app.keygen
-
-# 3. arriba
-docker compose up -d
-```
-
-El dashboard queda en **http://servidor:8090** y **siempre exige usuario y
-contraseña** (`MONITOR_DASH_USER` / `MONITOR_DASH_PASS`).
-
-- Los datos (`./data`) y reportes (`./reports`) sobreviven a
-  `docker compose down && docker compose up -d`.
-- `GET /healthz` responde 200 mientras el planificador esté vivo (es el
-  healthcheck del contenedor y no requiere autenticación).
-- ⚠ **Sin `MONITOR_SECRET_KEY` los secretos guardados son irrecuperables** —
-  guárdala donde guardes tus respaldos.
-- ⚠ Si expones el puerto fuera de la red interna, pon el servicio detrás de
-  un **reverse proxy con TLS** (nginx, Caddy, Traefik): HTTP Basic sin TLS
-  viaja en claro.
-- Los logs también salen por `docker logs stability-monitor`.
-
 <a name="dashboard"></a>
-## 3. Uso del dashboard
+## 2. Uso del dashboard
 
 La vista principal muestra **una tarjeta por conexión** con: estado (verde
 UP / ámbar DEGRADED / rojo DOWN / gris pausada), disponibilidad 24 h / 7 d /
@@ -139,7 +110,7 @@ fallos consecutivos (histéresis anti-parpadeo). El incidente se cierra con el
 primer chequeo exitoso y la alerta de recuperación indica cuánto duró.
 
 <a name="conexiones"></a>
-## 4. Conexiones: campos y ejemplos
+## 3. Conexiones: campos y ejemplos
 
 **Comunes**: nombre, cliente (agrupa en reportes), protocolo, host, puerto
 (se rellena solo según el protocolo), usuario, secreto, intervalo (30 s–1 h),
@@ -183,23 +154,22 @@ PostgreSQL, `program_name` en MySQL, `appname` en SQL Server, `program` en
 Oracle) para que los administradores puedan reconocerlo y filtrarlo.
 
 <a name="alertas"></a>
-## 5. Alertas
+## 4. Alertas
 
 Cuando se confirma una caída (y cuando se recupera):
 
-- **Windows**: notificación toast nativa + sonido opcional + ícono de
+- **En Windows**: notificación toast nativa + sonido opcional + ícono de
   bandeja en rojo + banner persistente en el dashboard.
-- **Docker**: registro en logs + banner en el dashboard.
 - **SMTP** y **webhook HTTP** (opcionales, apagados por defecto): se
-  configuran en ⚙ Ajustes. En el Modo A solo deben apuntar a servidores de
-  la LAN.
+  configuran en ⚙ Ajustes. Como la máquina no tiene internet, solo deben
+  apuntar a servidores de la LAN (por ejemplo, un SMTP interno).
 
 Anti-spam: **una sola alerta por incidente**. Si quieres recordatorios
 mientras siga caído, actívalos en Ajustes («Recordatorio si sigue caída»).
 Toda alerta enviada (o fallida) queda en el registro `alerts_log`.
 
 <a name="reportes"></a>
-## 6. Reportes de estabilidad
+## 5. Reportes de estabilidad
 
 Botón **📄 Reportes**: elige cliente y período (últimos 7/30 días, mes
 anterior o personalizado) y pulsa «Generar reporte».
@@ -216,7 +186,7 @@ El branding (nombre de la empresa, color de acento, logo) se configura en
 ⚙ Ajustes.
 
 <a name="ajustes"></a>
-## 7. Ajustes y respaldo de configuración
+## 6. Ajustes y respaldo de configuración
 
 En ⚙ Ajustes puedes editar:
 
@@ -228,19 +198,17 @@ En ⚙ Ajustes puedes editar:
 - **Branding** de reportes.
 
 **Respaldo**: «Exportar JSON» descarga conexiones y ajustes. Los **secretos
-no se exportan** (el cifrado DPAPI/Fernet no es transferible entre máquinas
-ni modos): al importar en otra instalación, las conexiones se crean
-**pausadas** y deberás reingresar las contraseñas y reanudarlas.
+no se exportan** (el cifrado DPAPI está ligado a la máquina y usuario de
+Windows, no es transferible): al importar en otra máquina, las conexiones se
+crean **pausadas** y deberás reingresar las contraseñas y reanudarlas.
 
 <a name="demo"></a>
-## 8. Modo demo
+## 7. Modo demo
 
 Para evaluar el dashboard, las gráficas y los reportes sin servidores reales:
 
 ```bash
-# desarrollo / Modo A
 python -m app.main --demo
-# Docker: agrega MONITOR_DEMO=1 al .env antes del primer arranque
 ```
 
 Siembra 6 conexiones ficticias de dos clientes (archivos y bases de datos)
@@ -249,15 +217,13 @@ conexiones demo nacen **pausadas** (sus hosts no existen); puedes borrarlas
 desde el dashboard cuando termines.
 
 <a name="problemas"></a>
-## 9. Solución de problemas
+## 8. Solución de problemas
 
 | Síntoma | Causa probable / solución |
 |---|---|
 | El dashboard no abre en `127.0.0.1:8090` | ¿Otro proceso usa el puerto? Define `MONITOR_PORT` con otro valor. Revisa `logs\app.log`. |
-| «No se pudo descifrar el secreto…» | La base se movió de máquina/usuario (DPAPI) o cambió `MONITOR_SECRET_KEY` (Fernet). Reingresa la credencial en la conexión. |
-| En Docker: «MONITOR_SECRET_KEY no está definida» | Genera la clave (`python -m app.keygen`) y ponla en `.env`. |
-| En Docker: «el dashboard exige autenticación» al arrancar | Faltan `MONITOR_DASH_USER`/`MONITOR_DASH_PASS` en `.env`. |
-| Una conexión SFTP falla con causa `tls` | La clave del host cambió (¿reinstalación del servidor?). Si es legítimo, borra la línea de ese host en `data/known_hosts`. |
+| «No se pudo descifrar el secreto…» | La carpeta `data\` se copió desde otra máquina o usuario de Windows (DPAPI está ligado a ambos). Reingresa la credencial en la conexión. |
+| Una conexión SFTP falla con causa `tls` | La clave del host cambió (¿reinstalación del servidor?). Si es legítimo, borra la línea de ese host en `data\known_hosts`. |
 | Muchas conexiones al mismo host van «lentas» | Es la política de cortesía: se serializan y espacian a propósito. Puedes relajar el espaciado en Ajustes, con criterio. |
 | La detección de una caída tarda | Por diseño tarda hasta `intervalo × (reintentos + 1) + timeout`. Baja intervalo o reintentos si necesitas detectar antes. |
 | El reporte no muestra un cliente | El campo «cliente» de las conexiones debe coincidir exactamente. |
@@ -272,6 +238,7 @@ desde el dashboard cuando termines.
 | `logs/app.log` | Log técnico rotativo. |
 | `reports/*.html` | Reportes generados (autocontenidos). |
 
-Los respaldos correctos del Modo A son: la carpeta `data\` completa **más**
-esta guía de reinstalación. Recuerda que los secretos DPAPI solo se descifran
-en la misma máquina y usuario.
+El respaldo correcto es: la carpeta `data\` completa **más** esta guía de
+reinstalación. Recuerda que los secretos DPAPI solo se descifran en la misma
+máquina y usuario de Windows; al restaurar en otra máquina deberás
+reingresarlos.
