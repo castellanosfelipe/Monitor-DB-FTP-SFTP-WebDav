@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StabilityMonitor</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-dot" id="global-dot"></span>
+      <h1>StabilityMonitor</h1>
+      <span class="muted" id="global-summary"></span>
+    </div>
+    <div class="topbar-actions">
+      <button id="btn-pause" class="btn ghost" title="Pausar o reanudar todos los chequeos">⏸ Pausar todo</button>
+      <button id="btn-new" class="btn primary">+ Nueva conexión</button>
+    </div>
+  </header>
+
+  <div id="incident-banner" class="incident-banner hidden"></div>
+
+  <section class="filters">
+    <input type="search" id="f-search" placeholder="Buscar por nombre…">
+    <select id="f-client"><option value="">Todos los clientes</option></select>
+    <select id="f-protocol">
+      <option value="">Todos los protocolos</option>
+      <option>FTP</option><option>FTPS</option><option>SFTP</option>
+      <option>WEBDAV</option><option>WEBDAVS</option>
+      <option>POSTGRES</option><option>MYSQL</option><option>MARIADB</option>
+      <option>SQLSERVER</option><option>ORACLE</option>
+    </select>
+    <select id="f-status">
+      <option value="">Todos los estados</option>
+      <option value="UP">UP</option>
+      <option value="DEGRADED">DEGRADED</option>
+      <option value="DOWN">DOWN</option>
+      <option value="PAUSED">Pausadas</option>
+    </select>
+    <span class="muted" id="refresh-info"></span>
+  </section>
+
+  <main id="cards" class="cards"></main>
+  <p id="empty-state" class="empty hidden">No hay conexiones aún. Crea la primera con «Nueva conexión».</p>
+
+  <!-- Modal: crear / editar -->
+  <div id="modal-form" class="modal hidden">
+    <div class="modal-box">
+      <h2 id="form-title">Nueva conexión</h2>
+      <form id="conn-form" autocomplete="off">
+        <input type="hidden" id="c-id">
+        <div class="grid2">
+          <label>Nombre <input id="c-name" required></label>
+          <label>Cliente <input id="c-client" placeholder="para agrupar en reportes"></label>
+          <label>Protocolo
+            <select id="c-protocol">
+              <option>FTP</option><option>FTPS</option><option>SFTP</option>
+              <option>WEBDAV</option><option>WEBDAVS</option>
+              <option>POSTGRES</option><option>MYSQL</option><option>MARIADB</option>
+              <option>SQLSERVER</option><option>ORACLE</option>
+            </select>
+          </label>
+          <label>Host <input id="c-host" required placeholder="ip o nombre en la LAN"></label>
+          <label>Puerto <input id="c-port" type="number" min="1" max="65535" placeholder="default del protocolo"></label>
+          <label>Usuario <input id="c-username"></label>
+          <label id="l-secret">Contraseña <input id="c-secret" type="password" placeholder="(sin cambios)"></label>
+          <label id="l-auth" class="hidden">Autenticación
+            <select id="c-auth"><option value="password">Contraseña</option><option value="key">Llave privada</option></select>
+          </label>
+          <label id="l-keypath" class="hidden">Ruta de llave privada <input id="c-keypath" placeholder="C:\llaves\id_ed25519"></label>
+          <label id="l-dbname" class="hidden">Base de datos / service <input id="c-dbname"></label>
+          <label id="l-sslmode">TLS
+            <select id="c-sslmode">
+              <option value="disabled">Deshabilitado</option>
+              <option value="preferred" selected>Preferido</option>
+              <option value="required">Requerido</option>
+            </select>
+          </label>
+          <label>Intervalo (s) <input id="c-interval" type="number" min="30" max="3600" value="60"></label>
+          <label>Timeout (s) <input id="c-timeout" type="number" min="1" max="120" value="10"></label>
+          <label>Reintentos antes de DOWN <input id="c-retries" type="number" min="0" max="10" value="2"></label>
+          <label>Umbral DEGRADED (ms) <input id="c-degraded" type="number" min="1" placeholder="opcional"></label>
+        </div>
+        <label>Objetivos a verificar (uno por línea)
+          <textarea id="c-targets" rows="3" placeholder="/clientes/acme/entrada&#10;ventas.pedidos"></textarea>
+        </label>
+        <label id="l-health" class="hidden">Query de salud (solo SELECT, máx. 1 fila, ≤ 5 s)
+          <input id="c-health" placeholder="SELECT 1">
+        </label>
+        <label id="l-write" class="check-row hidden">
+          <input type="checkbox" id="c-write"> Chequeo de escritura (sube y borra un probe de &lt;1 KB)
+        </label>
+        <label>Notas <textarea id="c-notes" rows="2"></textarea></label>
+        <div id="form-errors" class="form-errors hidden"></div>
+        <div id="test-result" class="test-result hidden"></div>
+        <div class="modal-actions">
+          <button type="button" id="btn-test" class="btn ghost">Probar conexión</button>
+          <span class="spacer"></span>
+          <button type="button" id="btn-cancel" class="btn ghost">Cancelar</button>
+          <button type="submit" class="btn primary" id="btn-save">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: detalle -->
+  <div id="modal-detail" class="modal hidden">
+    <div class="modal-box wide">
+      <h2 id="detail-title"></h2>
+      <div id="detail-body"></div>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" id="btn-detail-close" class="btn ghost">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

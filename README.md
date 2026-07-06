@@ -16,7 +16,7 @@ Dos modos con la misma base de código:
 |---|---|---|
 | 1 | Núcleo: modelo de datos, checkers FTP/FTPS/SFTP/WebDAV(S), clasificación de errores, política de cortesía, máquina de incidentes, CLI | ✅ |
 | 2 | Checkers de bases de datos (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle thin) probados contra contenedores reales | ✅ |
-| 3 | Dashboard (FastAPI + CRUD) | pendiente |
+| 3 | Dashboard: FastAPI + scheduler, CRUD, probar conexión, estado en vivo, Basic Auth | ✅ |
 | 4 | Incidentes y alertas por plataforma | pendiente |
 | 5 | Gráficas y reportes autocontenidos | pendiente |
 | 6 | Empaquetado (PyInstaller / Docker), modo demo, manual | pendiente |

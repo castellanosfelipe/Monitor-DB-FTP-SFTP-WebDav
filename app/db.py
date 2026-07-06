@@ -208,6 +208,34 @@ class Database:
         self._conn().commit()
         return cur.rowcount
 
+    # --- dashboard aggregates ---------------------------------------------------
+
+    def uptime_counts(self, since_iso: str) -> dict[int, tuple[int, int]]:
+        """Per connection: (non-DOWN checks, total checks) since ``since_iso``."""
+        rows = self._conn().execute(
+            "SELECT connection_id, SUM(status != 'DOWN') AS ok_count, COUNT(*) AS total "
+            "FROM checks WHERE ts_utc >= ? GROUP BY connection_id",
+            (since_iso,),
+        )
+        return {r["connection_id"]: (r["ok_count"], r["total"]) for r in rows}
+
+    def avg_latencies(self, since_iso: str) -> dict[int, float]:
+        rows = self._conn().execute(
+            "SELECT connection_id, AVG(latency_ms) AS avg_ms FROM checks "
+            "WHERE ts_utc >= ? AND latency_ms IS NOT NULL GROUP BY connection_id",
+            (since_iso,),
+        )
+        return {r["connection_id"]: r["avg_ms"] for r in rows}
+
+    def latest_checks(self) -> dict[int, sqlite3.Row]:
+        """Most recent check per connection (ids grow with time)."""
+        rows = self._conn().execute(
+            "SELECT ch.* FROM checks ch "
+            "JOIN (SELECT connection_id, MAX(id) AS max_id FROM checks GROUP BY connection_id) last "
+            "ON ch.id = last.max_id"
+        )
+        return {r["connection_id"]: r for r in rows}
+
     # --- incidents -------------------------------------------------------------
 
     def open_incident(

@@ -171,3 +171,45 @@ nativo, mismo protocolo TDS). En una máquina x64 puede usarse
 comandos exactos están en el docstring de `tests/integration/test_live_databases.py`.
 Verificado además en vivo: `application_name` visible en `pg_stat_activity`
 durante el chequeo y cero sesiones remanentes al terminar.
+
+## Fase 3 — Dashboard
+
+### D-023 · Scheduler de disparo único re-armado al finalizar
+Cada conexión es un job one-shot de APScheduler que se re-arma al terminar su
+chequeo, en lugar de un trigger de intervalo fijo. Consecuencias deseadas: una
+conexión jamás se solapa consigo misma; las esperas de cortesía no acumulan
+drift (el siguiente slot se calcula desde «ahora»); el backoff es simplemente
+otro delay de re-armado; y con `misfire_grace_time=None` los jobs vencidos
+durante una suspensión/hibernación se ejecutan al despertar en vez de perderse
+(RNF de robustez). El pool de workers es 2× la concurrencia global para que
+los hilos esperando cortesía de un host no bloqueen chequeos ejecutables.
+
+### D-024 · «Probar conexión» pasa por el mismo throttle
+El botón del formulario ejecuta el chequeo completo a través del mismo
+`Throttle.slot(host)` que los chequeos programados: la política de cortesía
+aplica también a las pruebas manuales (nunca dos sesiones simultáneas contra
+el mismo host, ni siquiera probando). Si se prueba una conexión existente sin
+reescribir la contraseña, se reutiliza el secreto guardado (descifrado en el
+servidor; nunca viaja al navegador).
+
+### D-025 · `/healthz` sin autenticación
+El healthcheck de Docker Compose consulta `/healthz` sin credenciales; el
+endpoint solo revela vida del scheduler y versión, nunca datos de conexiones.
+Todo lo demás (página y API) exige Basic Auth cuando está habilitada.
+
+### D-026 · Duplicar crea la copia en pausa
+La copia apunta al mismo host que el original; crearla activa duplicaría la
+carga contra ese host sin que el usuario lo note. Nace `enabled=false` y
+conserva el secreto cifrado (mismo almacén, mismo token).
+
+### D-027 · Auto-refresh por polling (10 s), no SSE
+Polling simple de `/api/overview`: sobrevive reconexiones, proxies y
+suspensión del equipo sin lógica de re-suscripción, y con ≤100 conexiones el
+costo por consulta es trivial (3 agregaciones indexadas). La UI usa la fuente
+del sistema (`system-ui`) — cero recursos externos sin necesidad de empaquetar
+tipografías (el requisito de fuente local queda cubierto).
+
+### D-028 · Secretos nunca salen del servidor
+La API expone solo `has_secret`; en edición, `secret=null` significa
+«conservar el guardado» y una cadena lo reemplaza. El descifrado ocurre solo
+en el proceso del monitor (chequeos y pruebas).
