@@ -254,6 +254,77 @@ async function testConnection() {
   }
 }
 
+/* ---------- Detalle: gráficas (Chart.js local, specs dataviz) ---------- */
+const DARK = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+const VIZ = {
+  series: DARK ? "#3987e5" : "#2a78d6",
+  grid: DARK ? "#2c2c2a" : "#e1e0d9",
+  muted: "#898781",
+  good: "#0ca30c", warning: DARK ? "#fab219" : "#eda100", critical: "#d03b3b",
+  surface: DARK ? "#161d27" : "#ffffff",
+};
+let charts = { latency: null, availability: null };
+let detailId = null;
+let detailRange = "24h";
+
+function fmtBucket(iso, range) {
+  const d = new Date(iso.endsWith("Z") ? iso : iso + "Z");
+  return range === "24h"
+    ? d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", hour12: false })
+    : d.toLocaleDateString("es", { day: "2-digit", month: "2-digit" }) +
+      (range === "7d" ? " " + d.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", hour12: false }) : "");
+}
+
+async function loadCharts() {
+  if (detailId == null || typeof Chart === "undefined") return;
+  const s = await api(`/api/connections/${detailId}/series?range=${detailRange}`);
+  const axis = { grid: { color: VIZ.grid }, ticks: { color: VIZ.muted, maxTicksLimit: 10 }, border: { color: VIZ.grid } };
+
+  if (charts.latency) charts.latency.destroy();
+  charts.latency = new Chart($("chart-latency"), {
+    type: "line",
+    data: {
+      labels: s.latency.map((p) => fmtBucket(p.t, detailRange)),
+      datasets: [{
+        label: "Latencia (ms)", data: s.latency.map((p) => p.ms),
+        borderColor: VIZ.series, borderWidth: 2, pointRadius: 0, pointHitRadius: 12,
+        pointHoverRadius: 4, pointHoverBackgroundColor: VIZ.series,
+        pointHoverBorderColor: VIZ.surface, pointHoverBorderWidth: 2,
+        tension: 0.15, spanGaps: false,
+      }],
+    },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: true,
+      // Serie única: sin leyenda (el título de la sección la nombra)
+      plugins: { legend: { display: false }, tooltip: { intersect: false, mode: "index" } },
+      scales: { x: axis, y: { ...axis, beginAtZero: true } },
+    },
+  });
+
+  if (charts.availability) charts.availability.destroy();
+  const mk = (key, color, label) => ({
+    label, data: s.availability.map((b) => b[key] || 0),
+    backgroundColor: color, borderColor: VIZ.surface, borderWidth: 1,
+    borderRadius: 2, stack: "a", maxBarThickness: 24,
+  });
+  charts.availability = new Chart($("chart-availability"), {
+    type: "bar",
+    data: {
+      labels: s.availability.map((b) => fmtBucket(b.t, detailRange)),
+      datasets: [
+        mk("UP", VIZ.good, "UP"),
+        mk("DEGRADED", VIZ.warning, "DEGRADED"),
+        mk("DOWN", VIZ.critical, "DOWN"),
+      ],
+    },
+    options: {
+      animation: false, responsive: true,
+      plugins: { legend: { display: true, labels: { color: VIZ.muted, boxWidth: 12 } } },
+      scales: { x: { ...axis, stacked: true }, y: { ...axis, stacked: true, beginAtZero: true } },
+    },
+  });
+}
+
 /* ---------- Detalle ---------- */
 function fmtDur(s) {
   if (s == null) return "—";
@@ -264,9 +335,13 @@ function fmtDur(s) {
 
 async function openDetail(id) {
   const card = state.overview.connections.find((c) => c.id === id);
+  detailId = id;
   $("detail-title").textContent = card ? `${card.name} — ${card.host}:${card.port}` : "Detalle";
   $("detail-body").innerHTML = "Cargando…";
+  $("btn-csv-checks").href = `/api/export/checks.csv?connection_id=${id}&days=30`;
+  $("btn-csv-incidents").href = `/api/export/incidents.csv?connection_id=${id}`;
   $("modal-detail").classList.remove("hidden");
+  loadCharts().catch(() => {});
   try {
     const h = await api(`/api/connections/${id}/history?hours=24`);
     const checks = h.checks.slice(-50).reverse();
@@ -305,6 +380,58 @@ async function cardAction(id, act) {
   }
 }
 
+/* ---------- Reportes ---------- */
+function reportDates() {
+  const preset = $("r-preset").value;
+  const today = new Date();
+  const iso = (d) => d.toISOString().slice(0, 10);
+  if (preset === "custom") return { date_from: $("r-from").value, date_to: $("r-to").value };
+  if (preset === "prev-month") {
+    const first = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+    const last = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0));
+    return { date_from: iso(first), date_to: iso(last) };
+  }
+  const days = parseInt(preset, 10);
+  const from = new Date(today.getTime() - (days - 1) * 86400000);
+  return { date_from: iso(from), date_to: iso(today) };
+}
+
+async function refreshReportList() {
+  const items = await api("/api/reports");
+  $("report-list").innerHTML = items.length
+    ? items.map((r) =>
+        `<div class="report-row"><a href="/reports/${encodeURIComponent(r.file)}" target="_blank">${esc(r.file)}</a>
+         <span class="spacer"></span><span class="muted">${(r.size / 1024).toFixed(0)} KB</span></div>`).join("")
+    : '<p class="muted">Aún no hay reportes generados.</p>';
+}
+
+async function openReports() {
+  const clients = (state.overview && state.overview.clients) || [];
+  $("r-client").innerHTML = clients.map((c) => `<option>${esc(c)}</option>`).join("") ||
+    '<option value="">(sin clientes)</option>';
+  $("report-errors").classList.add("hidden");
+  $("modal-reports").classList.remove("hidden");
+  refreshReportList().catch(() => {});
+}
+
+async function generateReport() {
+  const btn = $("btn-generate-report");
+  btn.disabled = true; btn.textContent = "Generando…";
+  try {
+    const body = { client: $("r-client").value, ...reportDates() };
+    const r = await api("/api/reports", { method: "POST", body: JSON.stringify(body) });
+    $("report-errors").classList.add("hidden");
+    await refreshReportList();
+    window.open(`/reports/${encodeURIComponent(r.file)}`, "_blank");
+  } catch (e) {
+    const box = $("report-errors");
+    box.innerHTML = Array.isArray(e.detail) ? e.detail.map(esc).join("<br>") : esc(e.detail);
+    box.classList.remove("hidden");
+  } finally {
+    btn.disabled = false; btn.textContent = "Generar reporte";
+  }
+}
+
 /* ---------- Ajustes ---------- */
 async function openSettings() {
   const data = await api("/api/settings");
@@ -338,6 +465,21 @@ async function saveSettings(ev) {
 /* ---------- Wiring ---------- */
 document.addEventListener("DOMContentLoaded", () => {
   $("btn-new").addEventListener("click", () => openForm(null));
+  $("btn-reports").addEventListener("click", () => openReports().catch(() => {}));
+  $("btn-reports-close").addEventListener("click", () => $("modal-reports").classList.add("hidden"));
+  $("btn-generate-report").addEventListener("click", generateReport);
+  $("r-preset").addEventListener("change", () => {
+    document.querySelectorAll(".r-custom").forEach((el) =>
+      el.classList.toggle("hidden", $("r-preset").value !== "custom"));
+  });
+  $("range-switch").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-range]");
+    if (!btn) return;
+    detailRange = btn.dataset.range;
+    document.querySelectorAll("#range-switch .btn").forEach((b) =>
+      b.classList.toggle("active", b === btn));
+    loadCharts().catch(() => {});
+  });
   $("btn-settings").addEventListener("click", () => openSettings().catch(() => {}));
   $("btn-settings-cancel").addEventListener("click", () => $("modal-settings").classList.add("hidden"));
   $("settings-form").addEventListener("submit", saveSettings);

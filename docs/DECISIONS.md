@@ -248,3 +248,32 @@ reinicio porque el semáforo se dimensiona al arrancar; el formulario lo indica.
 ### D-034 · Purga nocturna a las 03:30
 Job de cron diario que borra checks e incidentes *cerrados* más antiguos que
 `retention.days` (default 365). Los incidentes abiertos nunca se purgan.
+
+## Fase 5 — Gráficas y reportes
+
+### D-035 · Chart.js vendorizado; reportes con SVG propio
+`static/vendor/chart.umd.min.js` (v4.4.7) se descarga **en build** desde el
+tarball de npm y se versiona en el repo: en runtime jamás se toca la red. El
+dashboard usa Chart.js; los reportes generan SVG a mano en `reports.py` porque
+deben ser un único archivo imprimible sin JavaScript.
+
+### D-036 · Paleta de visualización validada
+Colores según el método dataviz (paleta de referencia validada con el script
+de seis chequeos: CVD ΔE 73.6, banda de luminosidad y croma OK): latencia =
+serie única azul (`#2a78d6` claro / `#3987e5` oscuro, sin leyenda: el título
+la nombra); disponibilidad = paleta de **status** reservada
+(verde/ámbar/rojo) con leyenda y tooltips como canal secundario. Los reportes
+van fijos en modo claro: son documentos para imprimir/enviar, no UI.
+
+### D-037 · Definición de uptime en reportes (RF-6)
+Basada en incidentes, impresa en el propio reporte: downtime = suma de la
+porción de cada incidente que **solapa** el período; uptime = 1 − downtime ÷
+(duración × nº conexiones). Incidentes abiertos cuentan hasta el fin del
+período (o «ahora» si es antes). MTTR = media de duración de incidentes
+cerrados dentro del período. Días en UTC. El pie del reporte aclara la
+granularidad por sondeo y el backoff durante caídas.
+
+### D-038 · Series bucketizadas para las gráficas
+`/api/connections/{id}/series` promedia la latencia y agrega la
+disponibilidad por bucket (24 h→10 min/1 h; 7 d→1 h/6 h; 30 d→4 h/1 día) en
+lugar de enviar hasta ~43 000 checks crudos de 30 días al navegador.

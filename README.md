@@ -18,7 +18,7 @@ Dos modos con la misma base de código:
 | 2 | Checkers de bases de datos (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle thin) probados contra contenedores reales | ✅ |
 | 3 | Dashboard: FastAPI + scheduler, CRUD, probar conexión, estado en vivo, Basic Auth | ✅ |
 | 4 | Alertas: toasts/bandeja/sonido en Windows, SMTP y webhook opcionales, recordatorios, purga nocturna, ajustes desde el dashboard | ✅ |
-| 5 | Gráficas y reportes autocontenidos | pendiente |
+| 5 | Gráficas (latencia + timeline, Chart.js local), reportes HTML autocontenidos por cliente, export CSV | ✅ |
 | 6 | Empaquetado (PyInstaller / Docker), modo demo, manual | pendiente |
 
 ## Desarrollo

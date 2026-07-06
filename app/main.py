@@ -11,15 +11,15 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import secrets as pysecrets
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 
@@ -158,6 +158,16 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request, _: None = Depends(auth_dep)) -> HTMLResponse:
         return HTMLResponse(index_html)
+
+    @app.get("/reports/{filename}")
+    def get_report(filename: str, _: None = Depends(auth_dep)) -> Response:
+        # Nombre estricto: los reportes los genera la app, nada de rutas arbitrarias.
+        if not re.fullmatch(r"[A-Za-z0-9._-]+\.html", filename):
+            raise HTTPException(status_code=404, detail="Reporte no encontrado.")
+        path = config.reports_dir() / filename
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="Reporte no encontrado.")
+        return FileResponse(path, media_type="text/html")
 
     @app.get("/healthz")
     def healthz() -> Response:

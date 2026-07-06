@@ -1,7 +1,7 @@
 """Dashboard REST routes: CRUD, test-connection, overview, pause/resume."""
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -270,6 +270,160 @@ def connection_history(request: Request, connection_id: int, hours: int = 24) ->
         for r in ctx.db.list_incidents(connection_id)
     ]
     return {"checks": checks, "incidents": incidents}
+
+
+# --- series para gráficas (RF-5) ----------------------------------------------------------
+
+_RANGES: dict[str, tuple[int, int, int]] = {
+    # rango: (horas, bucket latencia s, bucket disponibilidad s)
+    "24h": (24, 600, 3600),
+    "7d": (24 * 7, 3600, 6 * 3600),
+    "30d": (24 * 30, 4 * 3600, 24 * 3600),
+}
+
+
+@router.get("/connections/{connection_id}/series")
+def connection_series(request: Request, connection_id: int, range: str = "24h") -> dict[str, Any]:
+    ctx = _ctx(request)
+    _get_or_404(ctx, connection_id)
+    hours, lat_bucket, avail_bucket = _RANGES.get(range, _RANGES["24h"])
+    now = utc_now()
+    since = now - timedelta(hours=hours)
+    rows = ctx.db.list_checks(connection_id, to_iso(since))
+
+    from app.util import from_iso
+
+    lat_sum: dict[int, float] = {}
+    lat_n: dict[int, int] = {}
+    avail: dict[int, dict[str, int]] = {}
+    base = since.timestamp()
+    for row in rows:
+        ts = from_iso(row["ts_utc"]).timestamp()
+        if row["latency_ms"] is not None:
+            bucket = int((ts - base) // lat_bucket)
+            lat_sum[bucket] = lat_sum.get(bucket, 0.0) + row["latency_ms"]
+            lat_n[bucket] = lat_n.get(bucket, 0) + 1
+        abucket = int((ts - base) // avail_bucket)
+        counts = avail.setdefault(abucket, {"UP": 0, "DEGRADED": 0, "DOWN": 0})
+        counts[row["status"]] = counts.get(row["status"], 0) + 1
+
+    def bucket_ts(index: int, size: int) -> str:
+        return to_iso(since + timedelta(seconds=index * size))
+
+    latency = [
+        {"t": bucket_ts(b, lat_bucket), "ms": round(lat_sum[b] / lat_n[b], 1)}
+        for b in sorted(lat_sum)
+    ]
+    availability = [
+        {"t": bucket_ts(b, avail_bucket), **avail[b]} for b in sorted(avail)
+    ]
+    return {"range": range, "latency": latency, "availability": availability}
+
+
+# --- export CSV (RF-3) ----------------------------------------------------------------------
+
+
+def _csv_response(header: list[str], rows: Any, filename: str) -> Response:
+    import csv
+    import io
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(header)
+    for row in rows:
+        writer.writerow(row)
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/export/checks.csv")
+def export_checks(request: Request, connection_id: int | None = None, days: int = 30) -> Response:
+    ctx = _ctx(request)
+    since = to_iso(utc_now() - timedelta(days=max(1, min(days, 3650))))
+    names = {c.id: c.name for c in ctx.db.list_connections()}
+    if connection_id is not None:
+        rows = ctx.db.list_checks(connection_id, since)
+    else:
+        rows = ctx.db.execute(
+            "SELECT * FROM checks WHERE ts_utc >= ? ORDER BY ts_utc", (since,)
+        ).fetchall()
+    data = (
+        (
+            r["id"], r["connection_id"], names.get(r["connection_id"], ""), r["ts_utc"],
+            r["status"], r["latency_ms"], r["error_type"] or "", r["error_msg"],
+        )
+        for r in rows
+    )
+    header = ["id", "connection_id", "connection", "ts_utc", "status", "latency_ms",
+              "error_type", "error_msg"]
+    return _csv_response(header, data, "checks.csv")
+
+
+@router.get("/export/incidents.csv")
+def export_incidents(request: Request, connection_id: int | None = None) -> Response:
+    ctx = _ctx(request)
+    names = {c.id: c.name for c in ctx.db.list_connections()}
+    rows = ctx.db.list_incidents(connection_id)
+    data = (
+        (
+            r["id"], r["connection_id"], names.get(r["connection_id"], ""), r["started_at"],
+            r["ended_at"] or "", r["duration_s"] or "", r["error_type"] or "",
+            r["first_error_msg"],
+        )
+        for r in rows
+    )
+    header = ["id", "connection_id", "connection", "started_at", "ended_at",
+              "duration_s", "error_type", "first_error_msg"]
+    return _csv_response(header, data, "incidents.csv")
+
+
+# --- reportes (RF-6) --------------------------------------------------------------------------
+
+
+@router.get("/reports")
+def list_reports(request: Request) -> list[dict[str, Any]]:
+    from app import config as app_config
+
+    out = []
+    for path in sorted(app_config.reports_dir().glob("*.html"), reverse=True):
+        stat = path.stat()
+        out.append(
+            {
+                "file": path.name,
+                "size": stat.st_size,
+                "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            }
+        )
+    return out
+
+
+@router.post("/reports", status_code=201)
+def create_report(request: Request, payload: dict[str, str]) -> dict[str, str]:
+    from datetime import date
+
+    from app.reports import Branding, generate_report
+    from app.settings_store import get_str
+
+    ctx = _ctx(request)
+    client = (payload.get("client") or "").strip()
+    try:
+        date_from = date.fromisoformat(payload.get("date_from", ""))
+        date_to = date.fromisoformat(payload.get("date_to", ""))
+    except ValueError:
+        raise HTTPException(status_code=422, detail=["Fechas inválidas (usa AAAA-MM-DD)."])
+    branding = Branding(
+        company=get_str(ctx.db, "branding.company"),
+        accent=get_str(ctx.db, "branding.accent"),
+        logo_b64=get_str(ctx.db, "branding.logo_b64"),
+    )
+    try:
+        path = generate_report(ctx.db, client, date_from, date_to, branding)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=[str(exc)])
+    return {"file": path.name}
 
 
 # --- ajustes (RF-7) ---------------------------------------------------------------------
