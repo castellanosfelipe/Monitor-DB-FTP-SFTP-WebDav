@@ -13,11 +13,11 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-Write-Host "== StabilityMonitor build (Modo A) — 100% offline ==" -ForegroundColor Cyan
+Write-Host "== StabilityMonitor build (Modo A) - 100% offline ==" -ForegroundColor Cyan
 
 if (-not (Test-Path ".\wheelhouse")) {
-    throw "No se encontró .\wheelhouse\ (dependencias vendorizadas). " +
-          "Este script está pensado para correr sin internet; si el " +
+    throw "No se encontro .\wheelhouse\ (dependencias vendorizadas). " +
+          "Este script esta pensado para correr sin internet; si el " +
           "wheelhouse no vino con el repo, no se puede continuar sin red."
 }
 
@@ -49,29 +49,57 @@ if ($LASTEXITCODE -ne 0) { throw "Los tests fallaron; no se genera el paquete." 
 # 3. PyInstaller onedir
 #    --noconsole: app de bandeja; el diagnóstico va a logs\app.log
 #    Los imports perezosos (DPAPI, toasts, bandeja) se declaran como hidden.
-& $py -m PyInstaller launcher.py `
-    --name StabilityMonitor `
-    --onedir `
-    --noconsole `
-    --noconfirm `
-    --clean `
-    --add-data "static;static" `
-    --add-data "templates;templates" `
-    --hidden-import win32crypt `
-    --hidden-import winotify `
-    --hidden-import winsound `
-    --hidden-import pystray `
-    --hidden-import "pystray._win32" `
-    --hidden-import "PIL.Image" `
-    --hidden-import "PIL.ImageDraw" `
-    --collect-submodules apscheduler `
-    --collect-submodules oracledb
+$pyInstallerArgs = @(
+    "launcher.py",
+    "--name", "StabilityMonitor",
+    "--onedir",
+    "--noconsole",
+    "--noconfirm",
+    "--clean",
+    "--add-data", "static;static",
+    "--add-data", "templates;templates"
+)
 
-if ($LASTEXITCODE -ne 0) { throw "PyInstaller falló." }
+# If Python 3.12 comes from Anaconda/conda, some base DLLs live in
+# Library\bin and PyInstaller may not collect them automatically.
+$basePrefix = (& $py -c "import sys; print(sys.base_prefix)")
+$condaBin = Join-Path $basePrefix "Library\bin"
+if (Test-Path $condaBin) {
+    foreach ($dll in @(
+        "libcrypto-3-x64.dll",
+        "libssl-3-x64.dll",
+        "liblzma.dll",
+        "libbz2.dll",
+        "libexpat.dll",
+        "ffi.dll",
+        "sqlite3.dll"
+    )) {
+        $path = Join-Path $condaBin $dll
+        if (Test-Path $path) {
+            $pyInstallerArgs += @("--add-binary", "$path;.")
+        }
+    }
+}
+
+$pyInstallerArgs += @(
+    "--hidden-import", "win32crypt",
+    "--hidden-import", "winotify",
+    "--hidden-import", "winsound",
+    "--hidden-import", "pystray",
+    "--hidden-import", "pystray._win32",
+    "--hidden-import", "PIL.Image",
+    "--hidden-import", "PIL.ImageDraw",
+    "--collect-submodules", "apscheduler",
+    "--collect-submodules", "oracledb"
+)
+
+& $py -m PyInstaller @pyInstallerArgs
+
+if ($LASTEXITCODE -ne 0) { throw "PyInstaller fallo." }
 
 # 4. Scripts de instalación junto al ejecutable
 Copy-Item install.ps1, uninstall.ps1 -Destination "dist\StabilityMonitor\"
 
 Write-Host ""
-Write-Host "Listo: dist\StabilityMonitor\" -ForegroundColor Green
-Write-Host "Copia esa carpeta completa a la máquina destino y ejecuta install.ps1 allí."
+Write-Host 'Listo: dist\StabilityMonitor\' -ForegroundColor Green
+Write-Host "Copia esa carpeta completa a la maquina destino y ejecuta install.ps1 alli."

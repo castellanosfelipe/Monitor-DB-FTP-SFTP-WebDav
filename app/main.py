@@ -216,7 +216,7 @@ def main() -> None:
         except Exception:
             logger.exception("no se pudo iniciar el ícono de bandeja")
     logger.info("StabilityMonitor %s — modo %s — http://%s:%d", __version__, mode, host, port)
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level="info", log_config=None)
 
 
 if __name__ == "__main__":
