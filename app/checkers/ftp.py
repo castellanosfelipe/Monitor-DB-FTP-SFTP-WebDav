@@ -17,6 +17,8 @@ from app.util import to_iso, utc_now
 PROBE_NAME = ".monitor_probe"
 
 _PERMISSION_HINTS = ("permission", "denied", "not authorized", "access is", "forbidden")
+_FTP_CONTROL_ENCODINGS = ("utf-8", "cp1252", "latin-1")
+_FTP_LISTING_ENCODINGS = ("utf-8", "cp1252", "latin-1")
 
 
 def make_ssl_context(ssl_mode: str) -> ssl.SSLContext:
@@ -60,25 +62,38 @@ class FtpChecker(BaseChecker):
         return results
 
     def _connect(self, cfg: ConnectionConfig, secret: str | None) -> FTP:
+        last_decode_error: UnicodeDecodeError | None = None
+        for encoding in _FTP_CONTROL_ENCODINGS:
+            ftp = self._new_client(cfg, encoding)
+            try:
+                ftp.connect(cfg.host, cfg.port, timeout=cfg.timeout_s)
+                ftp.login(cfg.username or "", secret or "")
+                if isinstance(ftp, FTP_TLS):
+                    try:
+                        ftp.prot_p()  # protect the data channel too
+                    except error_perm:
+                        pass  # server without PROT P; control channel is already TLS
+                return ftp
+            except UnicodeDecodeError as exc:
+                last_decode_error = exc
+                self._quiet_close(ftp)
+                continue
+            except error_perm as exc:
+                self._quiet_close(ftp)
+                raise CheckError(ErrorType.AUTH, f"autenticación rechazada: {exc}") from exc
+            except Exception:
+                self._quiet_close(ftp)
+                raise
+        raise CheckError(
+            ErrorType.PROTOCOL,
+            f"respuesta FTP no se pudo decodificar: {last_decode_error}",
+        )
+
+    @staticmethod
+    def _new_client(cfg: ConnectionConfig, encoding: str) -> FTP:
         if cfg.protocol is Protocol.FTPS:
-            ftp: FTP = FTP_TLS(context=make_ssl_context(cfg.ssl_mode))
-        else:
-            ftp = FTP()
-        ftp.connect(cfg.host, cfg.port, timeout=cfg.timeout_s)
-        try:
-            ftp.login(cfg.username or "", secret or "")
-            if isinstance(ftp, FTP_TLS):
-                try:
-                    ftp.prot_p()  # protect the data channel too
-                except error_perm:
-                    pass  # server without PROT P; control channel is already TLS
-        except error_perm as exc:
-            self._quiet_close(ftp)
-            raise CheckError(ErrorType.AUTH, f"autenticación rechazada: {exc}") from exc
-        except Exception:
-            self._quiet_close(ftp)
-            raise
-        return ftp
+            return FTP_TLS(context=make_ssl_context(cfg.ssl_mode), encoding=encoding)
+        return FTP(encoding=encoding)
 
     @staticmethod
     def _quiet_close(ftp: FTP) -> None:
@@ -102,12 +117,39 @@ class FtpChecker(BaseChecker):
                 message=f"error de protocolo: {exc}",
             )
         try:
-            ftp.nlst()
+            FtpChecker._safe_nlst(ftp)
         except error_perm:
             # Several FTP servers answer 550 to NLST on an *empty* directory;
             # CWD already proved the directory exists and is accessible.
             pass
         return TargetResult(target=target, ok=True)
+
+    @staticmethod
+    def _safe_nlst(ftp: FTP) -> None:
+        """Run NLST without failing a valid target due to legacy filename encoding."""
+        original_encoding = ftp.encoding
+        tried: set[str] = set()
+        try:
+            for encoding in (original_encoding, *_FTP_LISTING_ENCODINGS):
+                if encoding in tried:
+                    continue
+                tried.add(encoding)
+                ftp.encoding = encoding
+                try:
+                    ftp.nlst()
+                    return
+                except UnicodeDecodeError:
+                    # The data stream failed to decode; drain the pending 226
+                    # response when possible before trying another data encoding.
+                    try:
+                        ftp.voidresp()
+                    except Exception:
+                        pass
+            # CWD already proved the directory is reachable; the monitor does not
+            # use filenames, so a non-decodable listing must not become DOWN.
+            return
+        finally:
+            ftp.encoding = original_encoding
 
     @staticmethod
     def _write_probe(ftp: FTP, cfg: ConnectionConfig) -> TargetResult:
