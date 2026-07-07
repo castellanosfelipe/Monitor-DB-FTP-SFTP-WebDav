@@ -1,10 +1,6 @@
-<!-- TODO: agregar un banner/logo (ej. assets/banner.png, ancho 800px) y descomentar el bloque siguiente.
-     Sugerencia: una captura del dashboard en modo oscuro con la grilla de conexiones en verde/ámbar/rojo. -->
-<!--
 <div align="center">
-  <img src="assets/banner.png" alt="StabilityMonitor — panel de conexiones monitoreadas" width="800"/>
+  <img src="assets/dashboard.png" alt="Panel de StabilityMonitor con seis conexiones monitoreadas en estados verde, ámbar y rojo" width="800"/>
 </div>
--->
 
 <div align="center">
 
@@ -72,16 +68,10 @@ python -m app.main --demo
 # Abre http://127.0.0.1:8090 en tu navegador
 ```
 
-<!-- TODO: grabar un GIF corto (≤ 700px de ancho) del flujo principal y colocarlo en assets/demo.gif.
-     Sugerencia de guion (30-45 s): abrir el dashboard con la grilla de conexiones →
-     una conexión pasa a rojo con su causa → abrir el detalle con la gráfica de latencia →
-     generar un reporte de cliente. Luego descomentar el bloque de abajo. -->
-<!--
 <div align="center">
-  <img src="assets/demo.gif" alt="Flujo principal: panel de estado, alerta de caída, detalle de latencia y reporte" width="700"/>
-  <p><em>Del panel a la alerta y al reporte del cliente, en menos de un minuto.</em></p>
+  <img src="assets/demo.gif" alt="Flujo del panel: estado de las conexiones, detalle con gráficas de latencia y disponibilidad, y filtro por estado" width="760"/>
+  <p><em>Del panel de estado al detalle con gráficas de latencia y disponibilidad, en segundos.</em></p>
 </div>
--->
 
 > 💡 ¿Prefieres el ejecutable ya construido? Descárgalo desde la [página de Releases](https://github.com/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav/releases) y ejecútalo en Windows — sin internet ni Python.
 
@@ -102,31 +92,23 @@ python -m app.main --demo
 
 ## 📸 Capturas de pantalla
 
-<!-- TODO: el proyecto tiene una interfaz web real (templates/index.html + static/), pero aún no hay
-     capturas en el repositorio. Ejecuta `python -m app.main --demo`, toma las capturas indicadas abajo
-     (ancho ≤ 750px), guárdalas en assets/ y descomenta los bloques correspondientes. -->
-
-<!--
 ### Panel principal
 <div align="center">
-  <img src="assets/screenshot-dashboard.png" alt="Panel con una tarjeta por conexión, estado en color y uptime 24h/7d/30d" width="750"/>
-  <p><em>Una tarjeta por conexión con estado, uptime y latencia; se actualiza sola cada 10 s.</em></p>
+  <img src="assets/dashboard.png" alt="Panel con una tarjeta por conexión, estado en color, uptime 24h/7d/30d y banner de incidente abierto" width="750"/>
+  <p><em>Una tarjeta por conexión con estado (verde/ámbar/rojo), uptime y latencia; el banner superior avisa de los incidentes abiertos. Se actualiza sola cada 10 s.</em></p>
 </div>
 
 ### Detalle de una conexión
 <div align="center">
-  <img src="assets/screenshot-detalle.png" alt="Gráfica de latencia y timeline de disponibilidad de una conexión" width="750"/>
-  <p><em>Gráfica de latencia y línea de tiempo de disponibilidad (24 h / 7 d / 30 d) con la lista de incidentes.</em></p>
+  <img src="assets/detalle.png" alt="Gráfica de latencia, timeline de disponibilidad y lista de incidentes de una conexión" width="750"/>
+  <p><em>Gráfica de latencia y línea de tiempo de disponibilidad (24 h / 7 d / 30 d), con la lista de incidentes y su causa clasificada.</em></p>
 </div>
 
 ### Reporte de estabilidad del cliente
 <div align="center">
-  <img src="assets/screenshot-reporte.png" alt="Reporte HTML con uptime, MTTR y gráficas de disponibilidad" width="750"/>
-  <p><em>Reporte autocontenido listo para enviar: resumen ejecutivo, incidentes y comparativa mensual.</em></p>
+  <img src="assets/reporte.png" alt="Reporte HTML con disponibilidad, incidentes, downtime, MTTR y gráfica de disponibilidad diaria" width="750"/>
+  <p><em>Reporte autocontenido listo para enviar: resumen ejecutivo (uptime, incidentes, downtime, MTTR) y disponibilidad diaria, con comparativa contra el período anterior.</em></p>
 </div>
--->
-
-> 📌 **Pendiente de capturas.** La UI existe y funciona (dashboard en `127.0.0.1:8090`); faltan las imágenes en el repo. Corre el modo demo y añádelas a `assets/`.
 
 ---
 
@@ -268,7 +250,6 @@ flowchart LR
 - [ ] Verificación con Wireshark de que no se genera tráfico fuera de los chequeos configurados
 
 ### 🔮 Próximamente
-- [ ] Capturas de pantalla y GIF de demostración en el README
 - [ ] Firma del ejecutable de Windows (Authenticode)
 - [ ] Más canales de alerta y plantillas de reporte
 
