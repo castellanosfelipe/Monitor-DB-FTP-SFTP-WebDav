@@ -71,6 +71,7 @@ def test_backup_excludes_secrets_and_restore_creates_paused(tmp_path):
     client.post("/api/connections", json={
         "name": "SFTP X", "client": "ACME", "protocol": "SFTP", "host": "x.lan",
         "username": "u", "secret": "hunter2", "targets": ["/in"],
+        "aliases": [{"name": "Conexión Bogotá FTP", "enabled": True}],
     })
     client.put("/api/settings", json={"branding.company": "Empresa SA", "retention.days": "180"})
 
@@ -81,6 +82,7 @@ def test_backup_excludes_secrets_and_restore_creates_paused(tmp_path):
     assert "hunter2" not in backup.text and "secret" not in str(data["connections"][0]).lower()
     assert data["settings"]["branding.company"] == "Empresa SA"
     assert "smtp.password" not in data["settings"]
+    assert "Conexión Bogotá FTP" in data["connections"][0]["aliases_json"]
 
     # restaurar en una instalación limpia
     ctx2 = make_ctx(tmp_path / "otra")
@@ -92,6 +94,7 @@ def test_backup_excludes_secrets_and_restore_creates_paused(tmp_path):
 
     restored = ctx2.db.list_connections()[0]
     assert restored.name == "SFTP X"
+    assert restored.active_aliases == ["Conexión Bogotá FTP"]
     assert restored.enabled is False  # sin secreto: pausada
     assert restored.secret_encrypted is None
     assert ctx2.db.get_setting("branding.company") == "Empresa SA"

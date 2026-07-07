@@ -160,6 +160,12 @@ primer chequeo exitoso y la alerta de recuperación indica cuánto duró.
 (se rellena solo según el protocolo), usuario, secreto, intervalo (30 s–1 h),
 timeout, reintentos antes de DOWN, umbral DEGRADED en ms (opcional), notas.
 
+**Alias virtuales**: puedes registrar uno o varios nombres lógicos activos o
+inactivos para una conexión. Los alias aparecen en dashboard, alertas,
+exportaciones y reportes, y sirven para búsqueda/filtro. Son metadatos locales:
+no modifican host, puerto, protocolo, usuario, base de datos, rutas, query ni
+credenciales, y editarlos no genera sesiones adicionales contra el destino.
+
 **Objetivos a verificar** (opcional, uno por línea):
 
 - Protocolos de archivos → rutas absolutas: `/clientes/acme/entrada`
@@ -218,8 +224,8 @@ Toda alerta enviada (o fallida) queda en el registro `alerts_log`.
 Botón **📄 Reportes**: elige cliente y período (últimos 7/30 días, mes
 anterior o personalizado) y pulsa «Generar reporte».
 
-El resultado es **un único archivo HTML autocontenido** en `reports/` que se
-abre sin internet y se imprime a PDF desde el navegador. Incluye: resumen
+El resultado se genera en `reports/` como **HTML autocontenido** y como
+**PDF descargable**. Ambos abren sin internet. Incluye: resumen
 ejecutivo (disponibilidad, incidentes, downtime total, MTTR) con comparativa
 contra el período anterior, gráfica de disponibilidad diaria, gráfica de
 latencia, tabla de incidentes con causas y la **metodología del cálculo** al

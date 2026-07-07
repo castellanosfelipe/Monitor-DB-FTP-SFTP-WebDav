@@ -194,9 +194,14 @@ ventas.pedidos              ← tabla en una base de datos
 
 Una ruta o tabla inexistente marca la conexión como **DEGRADED** con causa `ruta/objeto inexistente` — distinta de "servidor caído", para que el reporte cuente la historia correcta.
 
+Los **alias virtuales** son nombres lógicos por conexión. Sirven para buscar,
+mostrar, auditar y reportar una conexión con nombres de negocio sin cambiar el
+host, puerto, usuario, ruta, base de datos ni query real. Editar alias no crea
+otra conexión ni dispara sesiones adicionales.
+
 ### Generar un reporte de cliente
 
-Desde el panel: **Reportes → elige cliente y rango → Generar**. El resultado es un único archivo HTML en `reports/`, autocontenido, que se abre sin internet y se imprime a PDF.
+Desde el panel: **Reportes → elige cliente y rango → Generar**. El resultado queda en `reports/` como HTML autocontenido y como PDF descargable, ambos sin depender de internet.
 
 ---
 
@@ -213,7 +218,7 @@ flowchart LR
     SCHED --> DB[("SQLite<br/>historial + secretos cifrados")]
     INC --> DB
     INC --> NOTIF["Toast · sonido · bandeja<br/>(Windows) / SMTP · webhook"]
-    DB --> REP["Reportes HTML<br/>autocontenidos"]
+    DB --> REP["Reportes HTML + PDF<br/>autocontenidos"]
 ```
 
 ### Stack tecnológico
@@ -242,7 +247,8 @@ flowchart LR
 - [x] Máquina de incidentes con histéresis y clasificación de causas
 - [x] Panel web con CRUD, estado en vivo, gráficas y "Probar conexión"
 - [x] Alertas: toast/sonido/bandeja en Windows, SMTP y webhook opcionales
-- [x] Reportes HTML autocontenidos por cliente + export CSV
+- [x] Reportes HTML/PDF autocontenidos por cliente + export CSV
+- [x] Alias virtuales por conexión sin sesiones adicionales
 - [x] Empaquetado offline para Windows y publicación automática en Releases (CI)
 
 ### 🔄 En progreso / verificación

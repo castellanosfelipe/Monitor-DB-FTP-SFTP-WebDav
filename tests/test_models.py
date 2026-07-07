@@ -4,6 +4,7 @@ from __future__ import annotations
 from app.db import Database
 from app.models import (
     DEFAULT_PORTS,
+    ConnectionAlias,
     ConnectionConfig,
     Protocol,
     validate_connection,
@@ -93,7 +94,12 @@ def test_connection_roundtrip_through_sqlite(tmp_path):
     db = Database(tmp_path / "t.db")
     cfg = make_cfg(
         protocol=Protocol.SFTP, port=2222, auth_type="key", key_path="/k/id",
-        targets=["/in", "/out"], degraded_ms=800, notes="nota ñ", enabled=False,
+        targets=["/in", "/out"],
+        aliases=[
+            ConnectionAlias("Conexión Bogotá FTP", True),
+            ConnectionAlias("Producción Ñandú", False),
+        ],
+        degraded_ms=800, notes="nota ñ", enabled=False,
     )
     connection_id = db.create_connection(cfg)
     loaded = db.get_connection(connection_id)
@@ -101,6 +107,8 @@ def test_connection_roundtrip_through_sqlite(tmp_path):
     assert loaded.protocol is Protocol.SFTP
     assert loaded.port == 2222
     assert loaded.targets == ["/in", "/out"]
+    assert [a.name for a in loaded.aliases] == ["Conexión Bogotá FTP", "Producción Ñandú"]
+    assert loaded.active_aliases == ["Conexión Bogotá FTP"]
     assert loaded.degraded_ms == 800
     assert loaded.enabled is False
     assert loaded.notes == "nota ñ"
@@ -113,3 +121,13 @@ def test_connection_roundtrip_through_sqlite(tmp_path):
 
     db.delete_connection(connection_id)
     assert db.get_connection(connection_id) is None
+
+
+def test_virtual_alias_validation_rejects_duplicates_and_unsafe_values():
+    assert validate_connection(make_cfg(aliases=[ConnectionAlias("Área Financiera")])) == []
+    assert validate_connection(
+        make_cfg(aliases=[ConnectionAlias("A\u0301rea Financiera"), ConnectionAlias("Área Financiera")])
+    )
+    assert validate_connection(make_cfg(aliases=[ConnectionAlias("../secreto")]))
+    assert validate_connection(make_cfg(aliases=[ConnectionAlias("x; DROP TABLE connections")]))
+    assert validate_connection(make_cfg(aliases=[ConnectionAlias("linea\nnueva")]))

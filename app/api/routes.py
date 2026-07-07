@@ -13,7 +13,14 @@ from app.api.schemas import (
     TargetResultOut,
     TestConnectionIn,
 )
-from app.models import CheckResult, ConnectionConfig, validate_connection
+from app.models import (
+    CheckResult,
+    ConnectionAlias,
+    ConnectionConfig,
+    alias_key,
+    parse_aliases_json,
+    validate_connection,
+)
 from app.platform.secretstore import SecretStoreError
 from app.util import to_iso, utc_now
 
@@ -43,6 +50,70 @@ def _encrypt_secret(ctx: Any, plain: str | None) -> str | None:
     if ctx.secret_store is None:
         raise HTTPException(status_code=500, detail="No hay almacén de secretos configurado.")
     return ctx.secret_store.encrypt(plain)
+
+
+def _merge_alias_metadata(
+    aliases: list[ConnectionAlias], existing: list[ConnectionAlias] | None = None
+) -> list[ConnectionAlias]:
+    """Keep per-alias timestamps while treating aliases as local metadata."""
+    now = to_iso(utc_now())
+    previous = {alias_key(a.name): a for a in (existing or [])}
+    merged: list[ConnectionAlias] = []
+    for alias in aliases:
+        key = alias_key(alias.name)
+        old = previous.get(key)
+        created_at = old.created_at if old and old.created_at else now
+        changed = old is None or old.name != alias.name or old.enabled != alias.enabled
+        merged.append(
+            ConnectionAlias(
+                name=alias.name,
+                enabled=alias.enabled,
+                created_at=created_at,
+                updated_at=now if changed else old.updated_at,
+            )
+        )
+    return merged
+
+
+def _monitoring_params_changed(before: ConnectionConfig, after: ConnectionConfig) -> bool:
+    """True only when a change can affect real network/database checks."""
+    return (
+        before.protocol,
+        before.host,
+        before.port,
+        before.username,
+        before.secret_encrypted,
+        before.auth_type,
+        before.key_path,
+        before.db_name,
+        before.ssl_mode,
+        tuple(before.targets),
+        before.health_query,
+        before.interval_s,
+        before.timeout_s,
+        before.retries,
+        before.degraded_ms,
+        before.write_check,
+        before.enabled,
+    ) != (
+        after.protocol,
+        after.host,
+        after.port,
+        after.username,
+        after.secret_encrypted,
+        after.auth_type,
+        after.key_path,
+        after.db_name,
+        after.ssl_mode,
+        tuple(after.targets),
+        after.health_query,
+        after.interval_s,
+        after.timeout_s,
+        after.retries,
+        after.degraded_ms,
+        after.write_check,
+        after.enabled,
+    )
 
 
 def _result_out(result: CheckResult) -> CheckResultOut:
@@ -81,6 +152,7 @@ def get_connection(request: Request, connection_id: int) -> ConnectionOut:
 def create_connection(request: Request, payload: ConnectionIn) -> ConnectionOut:
     ctx = _ctx(request)
     cfg = payload.to_config()
+    cfg.aliases = _merge_alias_metadata(cfg.aliases)
     _validate_or_422(cfg)
     cfg.secret_encrypted = _encrypt_secret(ctx, payload.secret)
     ctx.db.create_connection(cfg)
@@ -94,6 +166,7 @@ def update_connection(request: Request, connection_id: int, payload: ConnectionI
     ctx = _ctx(request)
     existing = _get_or_404(ctx, connection_id)
     cfg = payload.to_config(connection_id)
+    cfg.aliases = _merge_alias_metadata(cfg.aliases, existing.aliases)
     _validate_or_422(cfg)
     if payload.secret is None:
         cfg.secret_encrypted = existing.secret_encrypted  # keep the stored secret
@@ -101,7 +174,12 @@ def update_connection(request: Request, connection_id: int, payload: ConnectionI
         cfg.secret_encrypted = _encrypt_secret(ctx, payload.secret)
     ctx.db.update_connection(cfg)
     if ctx.engine is not None:
-        ctx.engine.schedule_connection(connection_id)
+        if not cfg.enabled:
+            ctx.engine.unschedule_connection(connection_id)
+        elif not existing.enabled:
+            ctx.engine.schedule_connection(connection_id, immediate=True)
+        elif _monitoring_params_changed(existing, cfg):
+            ctx.engine.schedule_connection(connection_id)
     return ConnectionOut.from_config(cfg)
 
 
@@ -122,6 +200,7 @@ def duplicate_connection(request: Request, connection_id: int) -> ConnectionOut:
     cfg.id = None
     cfg.name = f"{cfg.name} (copia)"
     cfg.enabled = False  # the copy starts paused: same host, courtesy first
+    cfg.aliases = _merge_alias_metadata(cfg.aliases)
     ctx.db.create_connection(cfg)
     return ConnectionOut.from_config(cfg)
 
@@ -212,6 +291,8 @@ def overview(request: Request) -> dict[str, Any]:
                 "protocol": cfg.protocol.value,
                 "host": cfg.host,
                 "port": cfg.port,
+                "aliases": [a.to_dict() for a in cfg.aliases],
+                "active_aliases": cfg.active_aliases,
                 "enabled": cfg.enabled,
                 "status": status,
                 "interval_s": cfg.interval_s,
@@ -343,7 +424,7 @@ def _csv_response(header: list[str], rows: Any, filename: str) -> Response:
 def export_checks(request: Request, connection_id: int | None = None, days: int = 30) -> Response:
     ctx = _ctx(request)
     since = to_iso(utc_now() - timedelta(days=max(1, min(days, 3650))))
-    names = {c.id: c.name for c in ctx.db.list_connections()}
+    meta = {c.id: (c.name, " | ".join(c.active_aliases)) for c in ctx.db.list_connections()}
     if connection_id is not None:
         rows = ctx.db.list_checks(connection_id, since)
     else:
@@ -352,31 +433,32 @@ def export_checks(request: Request, connection_id: int | None = None, days: int 
         ).fetchall()
     data = (
         (
-            r["id"], r["connection_id"], names.get(r["connection_id"], ""), r["ts_utc"],
+            r["id"], r["connection_id"], meta.get(r["connection_id"], ("", ""))[0], r["ts_utc"],
             r["status"], r["latency_ms"], r["error_type"] or "", r["error_msg"],
+            meta.get(r["connection_id"], ("", ""))[1],
         )
         for r in rows
     )
     header = ["id", "connection_id", "connection", "ts_utc", "status", "latency_ms",
-              "error_type", "error_msg"]
+              "error_type", "error_msg", "aliases"]
     return _csv_response(header, data, "checks.csv")
 
 
 @router.get("/export/incidents.csv")
 def export_incidents(request: Request, connection_id: int | None = None) -> Response:
     ctx = _ctx(request)
-    names = {c.id: c.name for c in ctx.db.list_connections()}
+    meta = {c.id: (c.name, " | ".join(c.active_aliases)) for c in ctx.db.list_connections()}
     rows = ctx.db.list_incidents(connection_id)
     data = (
         (
-            r["id"], r["connection_id"], names.get(r["connection_id"], ""), r["started_at"],
+            r["id"], r["connection_id"], meta.get(r["connection_id"], ("", ""))[0], r["started_at"],
             r["ended_at"] or "", r["duration_s"] or "", r["error_type"] or "",
-            r["first_error_msg"],
+            r["first_error_msg"], meta.get(r["connection_id"], ("", ""))[1],
         )
         for r in rows
     )
     header = ["id", "connection_id", "connection", "started_at", "ended_at",
-              "duration_s", "error_type", "first_error_msg"]
+              "duration_s", "error_type", "first_error_msg", "aliases"]
     return _csv_response(header, data, "incidents.csv")
 
 
@@ -390,9 +472,12 @@ def list_reports(request: Request) -> list[dict[str, Any]]:
     out = []
     for path in sorted(app_config.reports_dir().glob("*.html"), reverse=True):
         stat = path.stat()
+        pdf_path = path.with_suffix(".pdf")
         out.append(
             {
                 "file": path.name,
+                "pdf_file": pdf_path.name if pdf_path.is_file() else None,
+                "pdf_size": pdf_path.stat().st_size if pdf_path.is_file() else None,
                 "size": stat.st_size,
                 "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
             }
@@ -423,7 +508,8 @@ def create_report(request: Request, payload: dict[str, str]) -> dict[str, str]:
         path = generate_report(ctx.db, client, date_from, date_to, branding)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=[str(exc)])
-    return {"file": path.name}
+    pdf_path = path.with_suffix(".pdf")
+    return {"file": path.name, "pdf_file": pdf_path.name if pdf_path.is_file() else ""}
 
 
 # --- ajustes (RF-7) ---------------------------------------------------------------------
@@ -551,6 +637,11 @@ def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
     skipped = 0
     for item in payload.get("connections") or []:
         try:
+            aliases_raw = item.get("aliases_json")
+            if aliases_raw is None and "aliases" in item:
+                aliases_raw = json.dumps(item.get("aliases") or [])
+            if not isinstance(aliases_raw, str):
+                aliases_raw = json.dumps(aliases_raw or [])
             cfg = ConnectionConfig(
                 id=None,
                 name=item["name"],
@@ -564,6 +655,7 @@ def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
                 db_name=item.get("db_name"),
                 ssl_mode=item.get("ssl_mode", "preferred"),
                 targets=json.loads(item.get("targets_json", "[]")),
+                aliases=parse_aliases_json(aliases_raw),
                 health_query=item.get("health_query"),
                 interval_s=int(item.get("interval_s", 60)),
                 timeout_s=float(item.get("timeout_s", 10)),
@@ -575,6 +667,7 @@ def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
             )
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=[f"Conexión inválida en el backup: {exc}"])
+        cfg.aliases = _merge_alias_metadata(cfg.aliases)
         if (cfg.protocol.value, cfg.host, cfg.port, cfg.name) in existing:
             skipped += 1
             continue
@@ -582,6 +675,7 @@ def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
             skipped += 1
             continue
         ctx.db.create_connection(cfg)
+        existing.add((cfg.protocol.value, cfg.host, cfg.port, cfg.name))
         created += 1
 
     return {

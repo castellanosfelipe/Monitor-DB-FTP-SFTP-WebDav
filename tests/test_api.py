@@ -118,6 +118,77 @@ def test_toggle_pauses_and_resumes(tmp_path):
     assert client.post(f"/api/connections/{cid}/toggle").json()["enabled"] is True
 
 
+def test_alias_only_update_does_not_reschedule_or_change_technical_params(tmp_path):
+    db = Database(tmp_path / "aliases.db")
+
+    class FakeEngine:
+        paused = False
+
+        def __init__(self):
+            self.scheduled = []
+            self.unscheduled = []
+
+        def start(self):
+            pass
+
+        def stop(self):
+            pass
+
+        def is_alive(self):
+            return True
+
+        def schedule_connection(self, connection_id, immediate=False):
+            self.scheduled.append((connection_id, immediate))
+
+        def unschedule_connection(self, connection_id):
+            self.unscheduled.append(connection_id)
+
+    engine = FakeEngine()
+    ctx = AppContext(
+        db=db,
+        tracker=IncidentTracker(db),
+        throttle=Throttle(CourtesyPolicy(host_spacing_s=0.0)),
+        engine=engine,
+        secret_store=PlainSecretStore(),
+        auth=DashboardAuth(enabled=False),
+        mode="dev",
+    )
+    client = TestClient(create_app(ctx))
+
+    payload = dict(
+        PAYLOAD,
+        aliases=[
+            {"name": "Conexión Bogotá FTP", "enabled": True},
+            {"name": "Producción Ñandú", "enabled": False},
+        ],
+    )
+    created = client.post("/api/connections", json=payload)
+    assert created.status_code == 201, created.text
+    cid = created.json()["id"]
+    assert engine.scheduled == [(cid, True)]
+
+    before = ctx.db.get_connection(cid)
+    update = dict(
+        payload,
+        secret=None,
+        aliases=[
+            {"name": "Conexión Bogotá FTP", "enabled": True},
+            {"name": "Área Financiera", "enabled": True},
+        ],
+    )
+    resp = client.put(f"/api/connections/{cid}", json=update)
+    assert resp.status_code == 200, resp.text
+    after = ctx.db.get_connection(cid)
+
+    assert engine.scheduled == [(cid, True)]
+    assert engine.unscheduled == []
+    assert (after.protocol, after.host, after.port, after.username, after.targets) == (
+        before.protocol, before.host, before.port, before.username, before.targets,
+    )
+    assert after.active_aliases == ["Conexión Bogotá FTP", "Área Financiera"]
+    assert after.secret_encrypted == before.secret_encrypted
+
+
 def test_test_connection_endpoint_uses_checker_and_reports_detail(tmp_path, monkeypatch):
     client, _ = make_client(tmp_path)
     seen = {}

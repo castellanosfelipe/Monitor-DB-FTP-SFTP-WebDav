@@ -8,7 +8,19 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from app.models import DEFAULT_PORTS, ConnectionConfig, Protocol
+from app.models import DEFAULT_PORTS, ConnectionAlias, ConnectionConfig, Protocol
+
+
+class AliasIn(BaseModel):
+    name: str
+    enabled: bool = True
+
+
+class AliasOut(BaseModel):
+    name: str
+    enabled: bool
+    created_at: str | None
+    updated_at: str | None
 
 
 class ConnectionIn(BaseModel):
@@ -24,6 +36,7 @@ class ConnectionIn(BaseModel):
     db_name: str | None = None
     ssl_mode: str = "preferred"
     targets: list[str] = Field(default_factory=list)
+    aliases: list[AliasIn] = Field(default_factory=list)
     health_query: str | None = None
     interval_s: int = 60
     timeout_s: float = 10.0
@@ -47,6 +60,11 @@ class ConnectionIn(BaseModel):
             db_name=(self.db_name or "").strip() or None,
             ssl_mode=self.ssl_mode,
             targets=[t.strip() for t in self.targets if t.strip()],
+            aliases=[
+                ConnectionAlias(name=a.name.strip(), enabled=a.enabled)
+                for a in self.aliases
+                if a.name.strip()
+            ],
             health_query=(self.health_query or "").strip() or None,
             interval_s=self.interval_s,
             timeout_s=self.timeout_s,
@@ -77,6 +95,7 @@ class ConnectionOut(BaseModel):
     db_name: str | None
     ssl_mode: str
     targets: list[str]
+    aliases: list[AliasOut]
     health_query: str | None
     interval_s: int
     timeout_s: float
@@ -104,6 +123,15 @@ class ConnectionOut(BaseModel):
             db_name=cfg.db_name,
             ssl_mode=cfg.ssl_mode,
             targets=cfg.targets,
+            aliases=[
+                AliasOut(
+                    name=a.name,
+                    enabled=a.enabled,
+                    created_at=a.created_at,
+                    updated_at=a.updated_at,
+                )
+                for a in cfg.aliases
+            ],
             health_query=cfg.health_query,
             interval_s=cfg.interval_s,
             timeout_s=cfg.timeout_s,

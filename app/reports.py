@@ -59,6 +59,7 @@ class Branding:
 @dataclass
 class IncidentRow:
     connection: str
+    aliases: list[str]
     started_at: datetime
     ended_at: datetime | None
     duration_in_period_s: float
@@ -69,6 +70,7 @@ class IncidentRow:
 @dataclass
 class ConnStats:
     name: str
+    aliases: list[str]
     protocol: str
     interval_s: int
     uptime_pct: float
@@ -131,6 +133,7 @@ def compute_period_stats(
             all_incidents.append(
                 IncidentRow(
                     connection=cfg.name,
+                    aliases=cfg.active_aliases,
                     started_at=inc_start,
                     ended_at=from_iso(row["ended_at"]) if row["ended_at"] else None,
                     duration_in_period_s=in_period,
@@ -142,6 +145,7 @@ def compute_period_stats(
         conn_stats.append(
             ConnStats(
                 name=cfg.name,
+                aliases=cfg.active_aliases,
                 protocol=cfg.protocol.value,
                 interval_s=cfg.interval_s,
                 uptime_pct=uptime_pct,
@@ -416,16 +420,18 @@ def render_report(stats: PeriodStats, previous: PeriodStats | None, branding: Br
     min_interval = min((c.interval_s for c in stats.connections), default=60)
 
     incident_rows = "".join(
-        f"<tr><td>{_esc(i.connection)}</td><td>{_fmt_dt(i.started_at)}</td>"
+        f"<tr><td>{_esc(i.connection)}</td><td>{_esc(', '.join(i.aliases) or '—')}</td>"
+        f"<td>{_fmt_dt(i.started_at)}</td>"
         f"<td>{_fmt_dt(i.ended_at) if i.ended_at else '<b>abierto</b>'}</td>"
         f"<td>{fmt_duration(i.duration_in_period_s)}</td>"
         f"<td>{_esc(_ERROR_LABELS.get(i.error_type or '', i.error_type or '—'))}</td>"
         f"<td class='msg'>{_esc(i.message)}</td></tr>"
         for i in stats.incidents
-    ) or '<tr><td colspan="6" class="muted">Sin incidentes en el período 🎉</td></tr>'
+    ) or '<tr><td colspan="7" class="muted">Sin incidentes en el período 🎉</td></tr>'
 
     conn_rows = "".join(
-        f"<tr><td>{_esc(c.name)}</td><td>{_esc(c.protocol)}</td>"
+        f"<tr><td>{_esc(c.name)}</td><td>{_esc(', '.join(c.aliases) or '—')}</td>"
+        f"<td>{_esc(c.protocol)}</td>"
         f"<td>{fmt_pct(c.uptime_pct)}</td><td>{c.incidents}</td>"
         f"<td>{fmt_duration(c.downtime_s) if c.downtime_s else '—'}</td>"
         f"<td>{fmt_duration(c.mttr_s)}</td></tr>"
@@ -502,14 +508,14 @@ def render_report(stats: PeriodStats, previous: PeriodStats | None, branding: Br
 
   <h2>Detalle por conexión</h2>
   <table>
-    <tr><th>Conexión</th><th>Protocolo</th><th>Disponibilidad</th>
+    <tr><th>Conexión</th><th>Alias</th><th>Protocolo</th><th>Disponibilidad</th>
         <th>Incidentes</th><th>Downtime</th><th>MTTR</th></tr>
     {conn_rows}
   </table>
 
   <h2>Incidentes del período</h2>
   <table>
-    <tr><th>Conexión</th><th>Inicio</th><th>Fin</th><th>Duración en el período</th>
+    <tr><th>Conexión</th><th>Alias</th><th>Inicio</th><th>Fin</th><th>Duración en el período</th>
         <th>Causa</th><th>Detalle</th></tr>
     {incident_rows}
   </table>
@@ -532,6 +538,207 @@ def render_report(stats: PeriodStats, previous: PeriodStats | None, branding: Br
 def _slug(text: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return slug or "cliente"
+
+
+def _pdf_font(size: int, bold: bool = False):
+    from PIL import ImageFont
+
+    candidates = [
+        Path("C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf"),
+        Path("C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf"),
+        Path("C:/Windows/Fonts/tahomabd.ttf" if bold else "C:/Windows/Fonts/tahoma.ttf"),
+        Path("C:/Windows/Fonts/msyh.ttc"),
+        Path("C:/Windows/Fonts/simsun.ttc"),
+    ]
+    for path in candidates:
+        if path.is_file():
+            try:
+                return ImageFont.truetype(str(path), size=size)
+            except Exception:
+                continue
+    return ImageFont.load_default()
+
+
+def _text_width(draw, text: str, font) -> float:
+    box = draw.textbbox((0, 0), text, font=font)
+    return float(box[2] - box[0])
+
+
+def _wrap_pdf_text(draw, text: str, font, max_width: int) -> list[str]:
+    lines: list[str] = []
+    for raw_line in str(text).splitlines() or [""]:
+        words = raw_line.split(" ")
+        current = ""
+        for word in words:
+            candidate = word if not current else f"{current} {word}"
+            if _text_width(draw, candidate, font) <= max_width:
+                current = candidate
+                continue
+            if current:
+                lines.append(current)
+            current = word
+            while _text_width(draw, current, font) > max_width and len(current) > 1:
+                cut = len(current)
+                while cut > 1 and _text_width(draw, current[:cut], font) > max_width:
+                    cut -= 1
+                lines.append(current[:cut])
+                current = current[cut:]
+        lines.append(current)
+    return lines
+
+
+def render_report_pdf(
+    stats: PeriodStats,
+    previous: PeriodStats | None,
+    branding: Branding,
+    path: Path,
+) -> Path:
+    """Render a real offline PDF alongside the HTML report."""
+    from PIL import Image, ImageColor, ImageDraw
+
+    page_w, page_h = 1240, 1754  # A4 at 150 dpi
+    margin = 82
+    content_w = page_w - 2 * margin
+    ink = (16, 24, 32)
+    muted = (90, 96, 106)
+    grid = (220, 224, 229)
+    try:
+        accent = ImageColor.getrgb(branding.accent or "#2563eb")
+    except Exception:
+        accent = (37, 99, 235)
+
+    title_font = _pdf_font(34, bold=True)
+    h_font = _pdf_font(22, bold=True)
+    body_font = _pdf_font(17)
+    small_font = _pdf_font(14)
+    bold_font = _pdf_font(17, bold=True)
+
+    pages: list[Image.Image] = []
+    image = Image.new("RGB", (page_w, page_h), "white")
+    draw = ImageDraw.Draw(image)
+    y = margin
+
+    def new_page() -> None:
+        nonlocal image, draw, y
+        pages.append(image)
+        image = Image.new("RGB", (page_w, page_h), "white")
+        draw = ImageDraw.Draw(image)
+        y = margin
+
+    def ensure(height: int) -> None:
+        if y + height > page_h - margin:
+            new_page()
+
+    def line(text: str, font=body_font, fill=ink, gap: int = 8, indent: int = 0) -> None:
+        nonlocal y
+        wrapped = _wrap_pdf_text(draw, text, font, content_w - indent)
+        line_h = max(22, int(font.size * 1.35) if hasattr(font, "size") else 22)
+        ensure(max(1, len(wrapped)) * line_h + gap)
+        for part in wrapped:
+            draw.text((margin + indent, y), part, font=font, fill=fill)
+            y += line_h
+        y += gap
+
+    def heading(text: str) -> None:
+        nonlocal y
+        ensure(54)
+        y += 12
+        draw.text((margin, y), text, font=h_font, fill=ink)
+        y += 38
+        draw.line((margin, y, page_w - margin, y), fill=grid, width=2)
+        y += 14
+
+    company = branding.company or "StabilityMonitor"
+    line(f"Reporte de estabilidad - {stats.client}", title_font, ink, gap=2)
+    draw.rectangle((margin, y, page_w - margin, y + 6), fill=accent)
+    y += 18
+    line(
+        f"{company} | Periodo: {stats.start:%d/%m/%Y} - "
+        f"{(stats.end - timedelta(microseconds=1)):%d/%m/%Y} UTC | "
+        f"Generado: {utc_now():%d/%m/%Y %H:%M} UTC",
+        small_font,
+        muted,
+        gap=16,
+    )
+
+    heading("Resumen ejecutivo")
+    kpis = [
+        ("Disponibilidad", fmt_pct(stats.uptime_pct)),
+        ("Incidentes", str(stats.incident_count)),
+        ("Downtime total", fmt_duration(stats.downtime_s) if stats.downtime_s else "0 s"),
+        ("MTTR", fmt_duration(stats.mttr_s)),
+    ]
+    for label, value in kpis:
+        line(f"{label}: {value}", bold_font, ink, gap=2)
+    if previous is not None:
+        line(
+            f"Comparacion: periodo anterior con disponibilidad {fmt_pct(previous.uptime_pct)}, "
+            f"{previous.incident_count} incidentes y downtime {fmt_duration(previous.downtime_s)}.",
+            small_font,
+            muted,
+            gap=10,
+        )
+
+    heading("Detalle por conexion")
+    for conn in stats.connections:
+        alias = ", ".join(conn.aliases) or "sin alias"
+        line(
+            f"{conn.name} | Alias: {alias} | {conn.protocol} | "
+            f"Disponibilidad {fmt_pct(conn.uptime_pct)} | Incidentes {conn.incidents} | "
+            f"Downtime {fmt_duration(conn.downtime_s) if conn.downtime_s else '0 s'} | "
+            f"MTTR {fmt_duration(conn.mttr_s)}",
+            body_font,
+            ink,
+            gap=6,
+        )
+
+    heading("Incidentes del periodo")
+    if not stats.incidents:
+        line("Sin incidentes en el periodo.", body_font, muted)
+    for inc in stats.incidents:
+        alias = ", ".join(inc.aliases) or "sin alias"
+        line(
+            f"{inc.connection} | Alias: {alias} | Inicio {_fmt_dt(inc.started_at)} | "
+            f"Fin {_fmt_dt(inc.ended_at) if inc.ended_at else 'abierto'} | "
+            f"Duracion {fmt_duration(inc.duration_in_period_s)} | "
+            f"Causa {_ERROR_LABELS.get(inc.error_type or '', inc.error_type or 'desconocida')}",
+            body_font,
+            ink,
+            gap=2,
+        )
+        if inc.message:
+            line(f"Detalle: {inc.message}", small_font, muted, gap=8, indent=24)
+
+    heading("Metodologia")
+    min_interval = min((c.interval_s for c in stats.connections), default=60)
+    line(
+        "El downtime se mide desde el primer chequeo fallido confirmado hasta "
+        "el primer chequeo exitoso posterior. Los alias son metadatos locales: "
+        "no cambian host, puerto, usuario, rutas, base de datos ni consultas de salud.",
+        small_font,
+        muted,
+        gap=8,
+    )
+    line(
+        f"Intervalo minimo configurado: {min_interval} s. Reporte generado por "
+        f"StabilityMonitor v{__version__}; no requiere conexion a internet.",
+        small_font,
+        muted,
+        gap=8,
+    )
+
+    pages.append(image)
+    for index, page in enumerate(pages, start=1):
+        d = ImageDraw.Draw(page)
+        d.text(
+            (page_w - margin - 110, page_h - margin + 30),
+            f"Pagina {index}/{len(pages)}",
+            font=small_font,
+            fill=muted,
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pages[0].save(path, "PDF", save_all=True, append_images=pages[1:], resolution=150.0)
+    return path
 
 
 def generate_report(
@@ -559,4 +766,5 @@ def generate_report(
     filename = f"reporte_{_slug(client)}_{start_date:%Y%m%d}_{end_date:%Y%m%d}.html"
     path = config.reports_dir() / filename
     path.write_text(html_doc, encoding="utf-8")
+    render_report_pdf(stats, previous, branding, path.with_suffix(".pdf"))
     return path

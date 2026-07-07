@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import unicodedata
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -62,12 +63,80 @@ MAX_TIMEOUT_S = 120
 MAX_RETRIES = 10
 HEALTH_QUERY_MAX_LEN = 2000
 HEALTH_QUERY_TIMEOUT_S = 5  # hard cap (RF-2), enforced again at execution time
+MAX_ALIAS_LEN = 120
 
 
 class Status(str, Enum):
     UP = "UP"
     DEGRADED = "DEGRADED"
     DOWN = "DOWN"
+
+
+@dataclass
+class ConnectionAlias:
+    """A local, logical name for one connection.
+
+    Aliases are metadata only: they never participate in checker selection,
+    socket creation or connection-string construction.
+    """
+
+    name: str
+    enabled: bool = True
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    @classmethod
+    def from_obj(cls, obj: Any) -> "ConnectionAlias":
+        if isinstance(obj, str):
+            return cls(name=obj)
+        if isinstance(obj, dict):
+            return cls(
+                name=str(obj.get("name", "")),
+                enabled=bool(obj.get("enabled", True)),
+                created_at=obj.get("created_at"),
+                updated_at=obj.get("updated_at"),
+            )
+        return cls(name=str(obj or ""))
+
+    def normalized(self) -> "ConnectionAlias":
+        return ConnectionAlias(
+            name=normalize_alias_name(self.name),
+            enabled=self.enabled,
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "enabled": self.enabled,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+
+def normalize_alias_name(name: str) -> str:
+    """Trim and normalize aliases to NFC so accents survive round-trips."""
+    return unicodedata.normalize("NFC", str(name).strip())
+
+
+def parse_aliases_json(value: str | None) -> list[ConnectionAlias]:
+    try:
+        raw = json.loads(value or "[]")
+    except json.JSONDecodeError:
+        raw = []
+    if not isinstance(raw, list):
+        return []
+    return [ConnectionAlias.from_obj(item).normalized() for item in raw]
+
+
+def aliases_to_json(aliases: list[ConnectionAlias]) -> str:
+    normalized = [alias.normalized().to_dict() for alias in aliases if alias.name.strip()]
+    return json.dumps(normalized, ensure_ascii=False)
+
+
+def alias_key(name: str) -> str:
+    return normalize_alias_name(name).casefold()
 
 
 @dataclass
@@ -108,6 +177,7 @@ class ConnectionConfig:
     db_name: str | None = None
     ssl_mode: str = "preferred"
     targets: list[str] = field(default_factory=list)
+    aliases: list[ConnectionAlias] = field(default_factory=list)
     health_query: str | None = None
     interval_s: int = 60
     timeout_s: float = 10.0
@@ -135,6 +205,7 @@ class ConnectionConfig:
             db_name=row["db_name"],
             ssl_mode=row["ssl_mode"],
             targets=json.loads(row["targets_json"] or "[]"),
+            aliases=parse_aliases_json(row["aliases_json"] or "[]"),
             health_query=row["health_query"],
             interval_s=row["interval_s"],
             timeout_s=row["timeout_s"],
@@ -162,6 +233,7 @@ class ConnectionConfig:
             "db_name": self.db_name,
             "ssl_mode": self.ssl_mode,
             "targets_json": json.dumps(self.targets, ensure_ascii=False),
+            "aliases_json": aliases_to_json(self.aliases),
             "health_query": self.health_query,
             "interval_s": self.interval_s,
             "timeout_s": self.timeout_s,
@@ -172,12 +244,22 @@ class ConnectionConfig:
             "notes": self.notes,
         }
 
+    @property
+    def active_aliases(self) -> list[str]:
+        return [a.name for a in self.aliases if a.enabled]
+
 
 # --- Validation -------------------------------------------------------------
 # Messages are in Spanish because they surface directly in the UI/CLI.
 
 _DB_TARGET_RE = re.compile(r"^[A-Za-z0-9_$#]+(\.[A-Za-z0-9_$#]+)?$")
 _SELECT_RE = re.compile(r"^select\b", re.IGNORECASE)
+_CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
+_ALIAS_FORBIDDEN_CHARS = set('<>:"/\\|?*')
+_ALIAS_INJECTION_RE = re.compile(
+    r"(--|/\*|\*/|;|\bunion\s+select\b|\bdrop\s+table\b|\bor\s+1\s*=\s*1\b)",
+    re.IGNORECASE,
+)
 _FORBIDDEN_SQL_RE = re.compile(
     r"\b(insert|update|delete|drop|alter|create|truncate|grant|revoke|merge"
     r"|exec|execute|call|into|attach|pragma|copy|vacuum|begin|commit|rollback"
@@ -215,6 +297,26 @@ def validate_connection(cfg: ConnectionConfig) -> list[str]:
 
     if not cfg.name.strip():
         errors.append("El nombre no puede estar vacío.")
+    alias_seen: set[str] = set()
+    for alias in cfg.aliases:
+        name = normalize_alias_name(alias.name)
+        if not name:
+            errors.append("El alias virtual no puede estar vacío.")
+            continue
+        if len(name) > MAX_ALIAS_LEN:
+            errors.append(f"El alias virtual '{name[:30]}...' supera {MAX_ALIAS_LEN} caracteres.")
+        if _CONTROL_RE.search(name):
+            errors.append(f"El alias virtual '{name}' contiene caracteres de control.")
+        if any(ch in _ALIAS_FORBIDDEN_CHARS for ch in name):
+            errors.append(f"El alias virtual '{name}' contiene caracteres reservados.")
+        if "../" in name or "..\\" in name:
+            errors.append(f"El alias virtual '{name}' contiene secuencias de traversal.")
+        if _ALIAS_INJECTION_RE.search(name):
+            errors.append(f"El alias virtual '{name}' contiene una secuencia no permitida.")
+        key = alias_key(name)
+        if key in alias_seen:
+            errors.append(f"El alias virtual '{name}' está duplicado en la conexión.")
+        alias_seen.add(key)
     if not cfg.host.strip():
         errors.append("El host no puede estar vacío.")
     elif re.search(r"\s|://", cfg.host):

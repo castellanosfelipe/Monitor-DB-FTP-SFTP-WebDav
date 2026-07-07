@@ -45,11 +45,14 @@ function applyFilters(cards) {
   const client = $("f-client").value;
   const proto = $("f-protocol").value;
   const status = $("f-status").value;
-  return cards.filter((c) =>
-    (!q || c.name.toLowerCase().includes(q)) &&
-    (!client || c.client === client) &&
-    (!proto || c.protocol === proto) &&
-    (!status || c.status === status));
+  return cards.filter((c) => {
+    const aliases = (c.aliases || []).map((a) => a.name).join(" ");
+    const haystack = `${c.name} ${c.client || ""} ${c.host || ""} ${aliases}`.toLowerCase();
+    return (!q || haystack.includes(q)) &&
+      (!client || c.client === client) &&
+      (!proto || c.protocol === proto) &&
+      (!status || c.status === status);
+  });
 }
 
 function renderOverview() {
@@ -89,6 +92,10 @@ function renderOverview() {
 
 function cardHtml(c) {
   const status = c.status || "PENDIENTE";
+  const activeAliases = c.active_aliases || [];
+  const aliasesHtml = activeAliases.length
+    ? `<div class="alias-row">${activeAliases.map((a) => `<span class="chip alias">${esc(a)}</span>`).join("")}</div>`
+    : "";
   const error = c.status !== "UP" && c.last_error_msg
     ? `<div class="card-error">${esc(c.last_error_type || "")}: ${esc(c.last_error_msg)}</div>` : "";
   return `
@@ -101,6 +108,7 @@ function cardHtml(c) {
       <span class="chip">${esc(c.protocol)}</span>
     </div>
     <div class="muted">${esc(c.host)}:${c.port} · cada ${c.interval_s} s · último: ${fmtTs(c.last_check_ts)}</div>
+    ${aliasesHtml}
     <div class="card-metrics">
       <div class="metric"><span class="v">${fmtPct(c.uptime.h24)}</span><span class="k">24 h</span></div>
       <div class="metric"><span class="v">${fmtPct(c.uptime.d7)}</span><span class="k">7 d</span></div>
@@ -160,6 +168,8 @@ function openForm(cfg) {
     $("c-interval").value = cfg.interval_s; $("c-timeout").value = cfg.timeout_s;
     $("c-retries").value = cfg.retries; $("c-degraded").value = cfg.degraded_ms || "";
     $("c-targets").value = (cfg.targets || []).join("\n");
+    $("c-aliases-active").value = (cfg.aliases || []).filter((a) => a.enabled).map((a) => a.name).join("\n");
+    $("c-aliases-inactive").value = (cfg.aliases || []).filter((a) => !a.enabled).map((a) => a.name).join("\n");
     $("c-health").value = cfg.health_query || ""; $("c-write").checked = cfg.write_check;
     $("c-notes").value = cfg.notes || "";
     $("c-secret").placeholder = cfg.has_secret ? "(sin cambios)" : "";
@@ -168,6 +178,13 @@ function openForm(cfg) {
   }
   protocolFields();
   $("modal-form").classList.remove("hidden");
+}
+
+function aliasLines(id, enabled) {
+  return $(id).value.split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((name) => ({ name, enabled }));
 }
 
 function formPayload() {
@@ -185,6 +202,10 @@ function formPayload() {
     db_name: $("c-dbname").value || null,
     ssl_mode: $("c-sslmode").value,
     targets: $("c-targets").value.split("\n").map((s) => s.trim()).filter(Boolean),
+    aliases: [
+      ...aliasLines("c-aliases-active", true),
+      ...aliasLines("c-aliases-inactive", false),
+    ],
     health_query: $("c-health").value || null,
     interval_s: parseInt($("c-interval").value || "60", 10),
     timeout_s: parseFloat($("c-timeout").value || "10"),
@@ -336,7 +357,10 @@ function fmtDur(s) {
 async function openDetail(id) {
   const card = state.overview.connections.find((c) => c.id === id);
   detailId = id;
-  $("detail-title").textContent = card ? `${card.name} — ${card.host}:${card.port}` : "Detalle";
+  const aliasText = card && card.active_aliases && card.active_aliases.length
+    ? ` [${card.active_aliases.join(", ")}]`
+    : "";
+  $("detail-title").textContent = card ? `${card.name}${aliasText} — ${card.host}:${card.port}` : "Detalle";
   $("detail-body").innerHTML = "Cargando…";
   $("btn-csv-checks").href = `/api/export/checks.csv?connection_id=${id}&days=30`;
   $("btn-csv-incidents").href = `/api/export/incidents.csv?connection_id=${id}`;
@@ -401,7 +425,8 @@ async function refreshReportList() {
   $("report-list").innerHTML = items.length
     ? items.map((r) =>
         `<div class="report-row"><a href="/reports/${encodeURIComponent(r.file)}" target="_blank">${esc(r.file)}</a>
-         <span class="spacer"></span><span class="muted">${(r.size / 1024).toFixed(0)} KB</span></div>`).join("")
+         ${r.pdf_file ? `<a class="btn small ghost" href="/reports/${encodeURIComponent(r.pdf_file)}" download>PDF</a>` : ""}
+         <span class="spacer"></span><span class="muted">${(r.size / 1024).toFixed(0)} KB${r.pdf_size ? ` · PDF ${(r.pdf_size / 1024).toFixed(0)} KB` : ""}</span></div>`).join("")
     : '<p class="muted">Aún no hay reportes generados.</p>';
 }
 

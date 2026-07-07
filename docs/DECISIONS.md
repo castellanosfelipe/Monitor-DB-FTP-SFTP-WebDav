@@ -407,3 +407,19 @@ manual (Opción B, con el wheelhouse y el instalador de Python vendorizados)
 como alternativa para quien deba construir en su propia máquina Windows.
 `build.ps1` se hizo robusto para ambos entornos: usa el launcher `py -3.12`
 si existe y cae a `python` (el runner de CI) si no.
+
+### D-053 · Alias virtuales como metadatos locales
+Los alias virtuales se guardan en `connections.aliases_json` y viajan por API,
+backup/restore, dashboard, alertas, CSV y reportes. No forman parte de la
+conexión técnica: los checkers siguen recibiendo el mismo protocolo, host,
+puerto, usuario, objetivos y query. Editar solo alias no reprogama el job del
+scheduler, para evitar sesiones adicionales o cambios de carga sobre sistemas
+monitoreados. Los nombres se normalizan a Unicode NFC, se validan contra
+duplicados y secuencias inseguras, y soportan estado activo/inactivo por alias.
+
+### D-054 · Exportación PDF local desde los reportes
+Los reportes siguen generando HTML autocontenido con gráficas SVG, y además se
+genera un PDF descargable junto al HTML en `reports/`. El PDF se renderiza
+localmente con Pillow, ya presente en las dependencias Windows del ejecutable,
+para no depender de navegador, internet, servicios externos ni librerías no
+vendorizadas.

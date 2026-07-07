@@ -152,12 +152,13 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     @app.get("/reports/{filename}")
     def get_report(filename: str, _: None = Depends(auth_dep)) -> Response:
         # Nombre estricto: los reportes los genera la app, nada de rutas arbitrarias.
-        if not re.fullmatch(r"[A-Za-z0-9._-]+\.html", filename):
+        if not re.fullmatch(r"[A-Za-z0-9._-]+\.(html|pdf)", filename):
             raise HTTPException(status_code=404, detail="Reporte no encontrado.")
         path = config.reports_dir() / filename
         if not path.is_file():
             raise HTTPException(status_code=404, detail="Reporte no encontrado.")
-        return FileResponse(path, media_type="text/html")
+        media_type = "application/pdf" if path.suffix == ".pdf" else "text/html"
+        return FileResponse(path, media_type=media_type)
 
     @app.get("/healthz")
     def healthz() -> Response:

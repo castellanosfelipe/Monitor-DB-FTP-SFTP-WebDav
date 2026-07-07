@@ -169,7 +169,8 @@ class Alerter:
         if cfg is None:
             return f"conexión #{connection_id}"
         client = f", cliente {cfg.client}" if cfg.client else ""
-        return f"{cfg.name} ({cfg.protocol.value} {cfg.host}:{cfg.port}{client})"
+        aliases = f", alias {', '.join(cfg.active_aliases)}" if cfg.active_aliases else ""
+        return f"{cfg.name} ({cfg.protocol.value} {cfg.host}:{cfg.port}{client}{aliases})"
 
     def _on_opened(self, event: IncidentOpened) -> None:
         description = self._describe(event.connection_id)
@@ -185,6 +186,7 @@ class Alerter:
                 "incident_id": event.incident_id,
                 "connection_id": event.connection_id,
                 "connection": self._name(event.connection_id),
+                "aliases": self._aliases(event.connection_id),
                 "started_at": event.started_at.isoformat(),
                 "error_type": event.error_type,
                 "message": event.message,
@@ -208,6 +210,7 @@ class Alerter:
                 "incident_id": event.incident_id,
                 "connection_id": event.connection_id,
                 "connection": self._name(event.connection_id),
+                "aliases": self._aliases(event.connection_id),
                 "started_at": event.started_at.isoformat(),
                 "ended_at": event.ended_at.isoformat(),
                 "duration_s": event.duration_s,
@@ -220,7 +223,13 @@ class Alerter:
 
     def _name(self, connection_id: int) -> str:
         cfg = self._db.get_connection(connection_id)
-        return cfg.name if cfg is not None else f"conexión #{connection_id}"
+        if cfg is None:
+            return f"conexión #{connection_id}"
+        return cfg.active_aliases[0] if cfg.active_aliases else cfg.name
+
+    def _aliases(self, connection_id: int) -> list[str]:
+        cfg = self._db.get_connection(connection_id)
+        return cfg.active_aliases if cfg is not None else []
 
     # --- reminders (off by default) --------------------------------------------------
 
@@ -249,6 +258,7 @@ class Alerter:
                     "incident_id": incident_id,
                     "connection_id": connection_id,
                     "connection": self._name(connection_id),
+                    "aliases": self._aliases(connection_id),
                 },
             )
             self._dispatch(alert)

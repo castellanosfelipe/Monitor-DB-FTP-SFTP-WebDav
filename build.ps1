@@ -88,7 +88,10 @@ $pyInstallerArgs += @(
     "--hidden-import", "pystray",
     "--hidden-import", "pystray._win32",
     "--hidden-import", "PIL.Image",
+    "--hidden-import", "PIL.ImageColor",
     "--hidden-import", "PIL.ImageDraw",
+    "--hidden-import", "PIL.ImageFont",
+    "--hidden-import", "PIL.PdfImagePlugin",
     "--collect-submodules", "apscheduler",
     "--collect-submodules", "oracledb"
 )

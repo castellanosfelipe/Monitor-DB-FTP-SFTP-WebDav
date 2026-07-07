@@ -81,6 +81,8 @@ h2 { font-size: 16px; margin: 0 0 12px; }
   font-size: 11px; border: 1px solid var(--border); border-radius: 999px;
   padding: 1px 8px; color: var(--muted);
 }
+.alias-row { display: flex; flex-wrap: wrap; gap: 6px; min-height: 20px; }
+.chip.alias { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
 .card-metrics { display: flex; gap: 14px; }
 .metric { display: flex; flex-direction: column; }
 .metric .v { font-size: 15px; font-weight: 600; }

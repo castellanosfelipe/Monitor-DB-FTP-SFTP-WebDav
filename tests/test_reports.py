@@ -24,9 +24,12 @@ NOW = datetime(2026, 3, 20, tzinfo=timezone.utc)
 
 
 def add_conn(db, name="srv", client="ACME", interval=60) -> ConnectionConfig:
+    from app.models import ConnectionAlias
+
     cfg = ConnectionConfig(
         id=None, name=name, client=client, protocol=Protocol.SFTP,
         host=f"{name}.lan", port=22, interval_s=interval,
+        aliases=[ConnectionAlias("Alias Bogotá", True)],
     )
     db.create_connection(cfg)
     return cfg
@@ -128,9 +131,14 @@ def test_report_html_is_self_contained_and_complete(db, tmp_path, monkeypatch):
     assert "<svg" in html and html.count("<svg") == 2
     assert "Empresa Demo SA" in html
     assert "Disponibilidad" in html and "MTTR" in html
+    assert "Alias Bogotá" in html
     assert "conexión rechazada" in html  # causa traducida
     assert "backoff" in html  # metodología en el pie (RF-6)
     assert "99.4" in html  # uptime: 1h en 7d → 99.40%
+
+    pdf = path.with_suffix(".pdf")
+    assert pdf.is_file()
+    assert pdf.read_bytes().startswith(b"%PDF")
 
 
 def test_report_comparison_against_previous_period(db):
