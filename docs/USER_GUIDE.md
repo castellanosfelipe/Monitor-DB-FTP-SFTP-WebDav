@@ -30,28 +30,69 @@ de estabilidad listos para enviar a tus clientes.
 ## 1. Instalación — Windows 10 Pro x64, 100 % offline
 
 La máquina destino **no necesita internet ni Python**, y no hacen falta
-permisos de administrador. El paquete se construye una vez en una máquina de
-desarrollo con internet y se traslada por USB o red interna.
+permisos de administrador. Hay dos caminos:
 
-### 1.1 Construir el paquete (máquina CON internet)
+### Opción recomendada — descargar el paquete ya construido (Releases)
 
-1. Instala [Python 3.12 para Windows x64](https://www.python.org/downloads/)
-   (marca «Add python.exe to PATH»).
-2. Copia el código fuente del proyecto y abre PowerShell en esa carpeta.
+Cada versión publica en **GitHub Releases** un ZIP con el ejecutable ya
+compilado (`StabilityMonitor-vX.Y.Z-win64.zip`), generado automáticamente
+sobre Windows. No hace falta construir nada:
+
+1. Desde **cualquier** máquina con internet, descarga el ZIP de la
+   [página de Releases](https://github.com/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav/releases).
+2. Cópialo por USB a la máquina destino y descomprímelo (ver
+   [Paso 1.2](#instalar-en-destino)).
+
+Si prefieres (o necesitas) construir el ejecutable tú mismo, usa la Opción B.
+
+### Opción B — construir el paquete tú mismo
+
+Todo lo que la construcción necesita —el instalador de Python y las ~47
+dependencias exactas fijadas— ya viene **incluido en el repositorio**
+(carpetas `vendor/` y `wheelhouse/`), así que ni siquiera la máquina donde se
+construye necesita internet.
+
+> **Por qué construir en Windows.** PyInstaller no puede "compilar cruzado":
+> el ejecutable de Windows solo puede generarse **corriendo en una máquina
+> Windows**. (Por eso las Releases se compilan en un runner Windows de GitHub
+> Actions.) Si construyes en la misma máquina donde vas a usar el monitor, el
+> «Paso 1.1» y el «Paso 1.2» ocurren en la misma computadora, uno tras otro.
+
+#### 1.1 Construir el paquete
+
+*(En Windows x64. Puede ser la misma máquina destino o cualquier otra Windows;
+en ambos casos, sin internet.)*
+
+1. **Si Python 3.12 no está instalado**, corre el instalador oficial incluido
+   en el repo (no requiere internet, no requiere permisos de administrador si
+   eliges «Install for me only»):
+
+   ```
+   vendor\python-3.12.10-amd64.exe
+   ```
+
+   Marca **«Add python.exe to PATH»** en el instalador.
+2. Copia la carpeta completa del proyecto (incluye `wheelhouse\` y
+   `vendor\`) y abre PowerShell dentro de ella.
 3. Ejecuta:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\build.ps1
    ```
 
-   El script crea un entorno virtual, instala las dependencias fijadas,
-   corre los tests y genera **`dist\StabilityMonitor\`** con PyInstaller.
+   El script crea un entorno virtual, instala las dependencias **exclusivamente
+   desde `wheelhouse\`** (nunca desde PyPI — el script falla explícitamente si
+   no encuentra esa carpeta, en vez de intentar salir a internet), corre los
+   tests y genera **`dist\StabilityMonitor\`** con PyInstaller.
 
-### 1.2 Instalar en la máquina destino (SIN internet)
+<a name="instalar-en-destino"></a>
+### 1.2 Instalar en la máquina destino
 
-1. Copia la carpeta completa `dist\StabilityMonitor\` por USB a la máquina
-   destino, por ejemplo a `C:\Users\tu-usuario\StabilityMonitor\`.
-   Debe quedar en una carpeta donde tu usuario pueda escribir (ahí vivirán
+1. Coloca la carpeta `StabilityMonitor\` en la máquina destino (descomprimida
+   del ZIP de Releases, o copiada por USB desde `dist\StabilityMonitor\` si la
+   construiste tú). Por ejemplo en `C:\Users\tu-usuario\StabilityMonitor\`.
+   (Si construiste directamente en la máquina destino, ya está ahí.) Debe
+   quedar en una carpeta donde tu usuario pueda escribir (ahí vivirán
    `data\`, `logs\` y `reports\`).
 2. Dentro de esa carpeta, ejecuta:
 
@@ -77,6 +118,9 @@ Notas:
 - La app sobrevive reinicios (tarea programada) y suspensiones (los chequeos
   pendientes se ejecutan al despertar y se reprograman con normalidad).
 - Para desinstalar: `uninstall.ps1` (quita el autoarranque; los datos quedan).
+- Tras el build, las carpetas `vendor\`, `wheelhouse\` y `.venv-build\` ya no
+  hacen falta para *ejecutar* el monitor (`dist\StabilityMonitor\` es
+  autocontenido) — solo se necesitan si vuelves a construir el paquete.
 
 <a name="dashboard"></a>
 ## 2. Uso del dashboard

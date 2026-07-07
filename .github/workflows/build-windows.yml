@@ -1,0 +1,93 @@
+# Construye el ejecutable portable de Windows en un runner Windows real
+# (PyInstaller no compila de forma cruzada) y publica el ZIP resultante como
+# GitHub Release. El equipo destino descarga ese ZIP y lo instala sin internet.
+#
+# Se dispara al empujar un tag `vX.Y.Z`, o manualmente desde la pestaña Actions.
+name: build-windows
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # necesario para crear la release y subir el asset
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Construir dist\StabilityMonitor (offline desde wheelhouse) + tests
+        shell: pwsh
+        run: .\build.ps1
+
+      - name: Empaquetar dist en ZIP
+        id: pack
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path app\__init__.py -Pattern '__version__\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
+          $zip = "StabilityMonitor-v$ver-win64.zip"
+          if (Test-Path $zip) { Remove-Item $zip }
+          Compress-Archive -Path dist\StabilityMonitor\* -DestinationPath $zip -Force
+          "zip=$zip"     >> $env:GITHUB_OUTPUT
+          "version=$ver" >> $env:GITHUB_OUTPUT
+          Write-Host "Empaquetado: $zip"
+
+      - name: Verificar contenido del paquete
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist\StabilityMonitor\StabilityMonitor.exe")) {
+            throw "No se generó StabilityMonitor.exe"
+          }
+          if (-not (Test-Path "dist\StabilityMonitor\install.ps1")) {
+            throw "Falta install.ps1 en el paquete"
+          }
+          $size = [math]::Round(((Get-Item "${{ steps.pack.outputs.zip }}").Length / 1MB), 1)
+          Write-Host "OK: StabilityMonitor.exe presente, ZIP de $size MB"
+
+      - name: Subir artefacto de la corrida (siempre)
+        uses: actions/upload-artifact@v4
+        with:
+          name: StabilityMonitor-win64
+          path: ${{ steps.pack.outputs.zip }}
+          retention-days: 30
+
+      - name: Publicar Release con el ejecutable
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $zip = "${{ steps.pack.outputs.zip }}"
+          $notes = @"
+          ## StabilityMonitor $tag — ejecutable portable para Windows 10 Pro x64 (offline)
+
+          Monitor de disponibilidad de bajo impacto para servidores de archivos
+          (FTP, FTPS, SFTP, WebDAV, WebDAVS) y bases de datos (PostgreSQL, MySQL,
+          MariaDB, SQL Server, Oracle).
+
+          ### Instalación (la máquina destino NO necesita internet ni Python)
+          1. Descarga y descomprime **$zip**.
+          2. Dentro de la carpeta ``StabilityMonitor``, ejecuta en PowerShell:
+             ``powershell -ExecutionPolicy Bypass -File .\install.ps1``
+             (registra el autoarranque de usuario, sin admin, e inicia la app).
+          3. Abre el panel en http://127.0.0.1:8090 o usa el ícono de la bandeja.
+
+          Paquete autocontenido generado con PyInstaller sobre Windows.
+          "@
+          gh release view $tag --repo $env:GITHUB_REPOSITORY 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $zip --clobber --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create $tag $zip --title "StabilityMonitor $tag" --notes $notes --repo $env:GITHUB_REPOSITORY
+          }

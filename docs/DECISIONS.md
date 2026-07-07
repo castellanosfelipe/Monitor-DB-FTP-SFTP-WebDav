@@ -308,41 +308,6 @@ pystray, PIL) se declaran como `--hidden-import` porque PyInstaller no los ve
 en el grafo estático; `apscheduler` y `oracledb` van con `--collect-submodules`
 (cargan módulos dinámicamente).
 
-## Post-cierre — Modo serverless (Vercel + Neon)
-
-### D-044 · Tercer modo de despliegue, a petición y con desviaciones explícitas
-La especificación original prohíbe bases de datos con servidor para la
-persistencia propia y define dos modos; el despliegue en Vercel + Neon se
-agregó después **a petición del usuario**. Desviaciones aceptadas y
-documentadas en `docs/DEPLOY_VERCEL.md`: persistencia en PostgreSQL (Neon),
-runtime en internet (solo puede monitorear servidores públicos, no LAN) y
-chequeos disparados por un planificador externo en lugar de APScheduler.
-Los Modos A y B quedan intactos (SQLite, misma base de código).
-
-### D-045 · Chequeos por tick con presupuesto de tiempo
-Sin proceso residente, `/api/cron/tick` (protegido con `CRON_SECRET` por
-header Bearer) ejecuta los chequeos vencidos —los más atrasados primero—
-hasta agotar un presupuesto de ~45 s (< maxDuration de la función); el resto
-se difiere al siguiente tick. El plan Hobby de Vercel limita sus crons a una
-vez al día, así que el planificador principal es un workflow de GitHub
-Actions cada 5 min (en Pro basta cambiar `vercel.json` a `* * * * *`).
-
-### D-046 · Máquina de incidentes sin memoria de proceso
-Cada invocación serverless puede ser un proceso nuevo, así que el
-`IncidentTracker` reconstruye su estado desde la BD de forma perezosa: racha
-de fallos consecutivos (cola de checks DOWN), primer fallo y exponente de
-backoff se derivan del historial. Esto además arregla un caso real de los
-modos A/B: un reinicio a mitad de racha no confirmada ya no pierde los fallos
-previos (test `test_tracker_rebuilds_unconfirmed_streak_after_restart`).
-
-### D-047 · PgDatabase como gemelo de contrato
-`app/db_pg.py` implementa el mismo contrato público que `Database` (filas
-tipo dict, `execute()` traduciendo placeholders `?`, timestamps ISO TEXT) en
-lugar de introducir un ORM o refactorizar la capa SQLite estable. Diferencias
-de dialecto encapsuladas: `RETURNING id`, `COUNT(*) FILTER`, upsert. Contrato
-verificado con la misma batería contra Postgres real (contenedor) y smoke
-contra Neon con TLS.
-
 ### D-043 · Alcance de la verificación final
 Todo lo verificable en este entorno se ejecutó en vivo (ver
 `docs/ACCEPTANCE.md`): Modo B completo con Docker real, los cinco motores de
@@ -353,37 +318,92 @@ unitarios con mocks, con un guion de smoke test documentado para el destino.
 
 ## Post-cierre — Reducción a Modo A (Windows offline) únicamente
 
-### D-048 · Eliminación de Modo B (Docker) y del modo serverless (Vercel + Neon)
+### D-048 · Eliminación de los demás modos de despliegue
 El proyecto se acotó a su único objetivo real: un ejecutable portable para una
-máquina **Windows sin internet**. Se eliminaron los archivos y el código que
-solo servían a los otros dos modos de despliegue:
-
-- **Docker**: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `.env.example`.
-- **Serverless**: `api/`, `vercel.json`, `.vercelignore`, el workflow de GitHub
-  Actions, `app/db_pg.py` (persistencia PostgreSQL/Neon), `app/serverless.py`
-  (runner por cron) y `docs/DEPLOY_VERCEL.md`.
-- `app/keygen.py`: su único propósito era generar `MONITOR_SECRET_KEY` para
-  Docker; en Windows los secretos usan DPAPI, que no requiere clave.
-- Ramas de código por modo en `main.py`, `detect.py`, `config.py` y
-  `logging_setup.py`; el endpoint `/api/cron/tick`; y el método
-  `IncidentTracker.hydrate()` (solo lo usaba el runner serverless).
+máquina **Windows sin internet**. Se habían explorado otros dos modos de
+despliegue (uno en contenedor, otro en la nube con base de datos gestionada);
+ambos se descartaron y se eliminó todo el código y los archivos que solo les
+servían a ellos: el adaptador de persistencia alternativo (mismo contrato
+público que `Database`, pero contra un motor con servidor), el runner de
+chequeos por tick externo, los archivos de imagen/orquestación de contenedor,
+y las ramas de código por modo en `main.py`, `detect.py`, `config.py` y
+`logging_setup.py`. También se quitó `app/keygen.py` (generaba la clave de
+cifrado que solo hacía falta en el modo eliminado; en Windows los secretos
+usan DPAPI, que no requiere clave) y `jinja2` de las dependencias (no se usaba).
 
 **Qué se conservó y por qué:**
 - Los **drivers de BD** (`pg8000`, PyMySQL, python-tds, oracledb) siguen: son
   los *checkers* que monitorean esas bases, funcionalidad central de Modo A.
-  `pg8000` lo usaban dos cosas distintas (el checker y el adaptador Neon); solo
-  se fue el adaptador.
+  `pg8000` lo usaban dos cosas distintas (el checker y el adaptador de
+  persistencia eliminado); solo se fue el adaptador.
 - **Fernet** (`secrets_fernet.py`) se mantiene como backend de secretos **solo
   para desarrollo/CI no-Windows** (permite correr y probar la app fuera de
   Windows, donde DPAPI no existe). En el ejecutable Windows nunca se usa.
 - La **reconstrucción de estado desde el historial** en `IncidentTracker`
-  (originalmente motivada por serverless) se queda: resuelve un caso real de
-  Modo A — que la app, al arrancar sola tras reiniciar Windows a mitad de una
-  racha de fallos, no pierda los fallos previos ni re-alerte. Cubierta por
+  (motivada originalmente por el modo eliminado, donde cada invocación podía
+  ser un proceso nuevo) se queda: resuelve un caso real de Modo A — que la
+  app, al arrancar sola tras reiniciar Windows a mitad de una racha de
+  fallos, no pierda los fallos previos ni re-alerte. Cubierta por
   `test_rebuilds_unconfirmed_streak_after_restart`.
-- Se quitó `jinja2` de las dependencias (las plantillas se sirven como archivo
-  estático, sin renderizado Jinja).
 
 La autenticación del dashboard pasa a ser **opcional** (el dashboard escucha en
 `127.0.0.1`); se activa solo si se definen `MONITOR_DASH_USER`/`MONITOR_DASH_PASS`,
 o al exponer a la LAN con `MONITOR_BIND_LAN=1`.
+
+## Post-cierre — Empaquetado 100 % offline (wheelhouse + Python vendorizado)
+
+### D-049 · Wheelhouse vendorizado en el repositorio (`wheelhouse/`)
+`build.ps1` instala dependencias exclusivamente desde `wheelhouse/` (`pip
+install --no-index --find-links wheelhouse`) y falla explícitamente si esa
+carpeta no existe, en vez de intentar salir a PyPI. Se vendorizaron 47 wheels
+`win_amd64`/`cp312` (22 MB): las de `requirements.txt` y `requirements-dev.txt`
+completas, más PyInstaller y sus propias dependencias de empaquetado
+(`altgraph`, `pyinstaller-hooks-contrib`, `pefile`, `pywin32-ctypes`,
+`setuptools`, `packaging`).
+
+**Trampa de `pip download` documentada para el futuro**: los marcadores de
+entorno (`sys_platform == "win32"`, `platform_system == "Windows"`) se evalúan
+contra el intérprete que *ejecuta* pip, no contra `--platform`/`--python-version`
+del destino. Descargar `-r requirements.txt` directo omite silenciosamente
+`pywin32`/`winotify`/`pystray`/`Pillow` (llevan marcador `sys_platform ==
+"win32"`) al correr desde macOS/Linux, y descargar `pystray`/`Pillow`/`PyInstaller`
+con resolución de dependencias completa arrastra paquetes de *otra* plataforma
+(`pyobjc-framework-Quartz` para darwin) que no existen para Windows y rompen la
+descarga. Solución aplicada: los paquetes condicionados por plataforma se
+descargan por nombre explícito con `--no-deps`, y sus dependencias reales de
+Windows (`Pillow`+`six` para `pystray`; `colorama` para `pytest`/`click`;
+`tzdata` para `tzlocal`, que a su vez lo requiere `APScheduler`; `pefile`+
+`pywin32-ctypes` para PyInstaller) se añaden a mano tras inspeccionar el
+`METADATA` de cada wheel. Verificado con un barrido final sobre los 47 wheels
+buscando cualquier `Requires-Dist` condicionado a Windows sin resolver.
+
+### D-050 · Instalador oficial de Python vendorizado (`vendor/`)
+Se incluye `python-3.12.10-amd64.exe` (descargado directo de
+`python.org/ftp`, cabecera PE verificada, SHA256 registrado) para que ni
+siquiera la máquina de build necesite internet para obtener Python. `3.12.13`
+—la versión usada en desarrollo— solo publica tarball fuente, sin instalador
+Windows; se usó `3.12.10` (misma serie `cp312`, compatibilidad de wheels
+intacta: los tags de wheel solo distinguen major.minor + ABI, no el parche).
+
+### D-051 · Límite técnico honesto: sin cross-compilation
+PyInstaller no soporta compilación cruzada — el `.exe`/`dist/StabilityMonitor/`
+solo puede generarse ejecutando `build.ps1` en una máquina Windows real. Desde
+un entorno de desarrollo no-Windows (este) es posible preparar y verificar
+*todo* lo que el build necesita (wheelhouse, instalador, el propio script),
+pero no producir el artefacto final. Documentado explícitamente en vez de
+simular un build inexistente.
+
+### D-052 · Ejecutable de Windows construido y publicado por GitHub Actions
+Como PyInstaller no compila de forma cruzada y el desarrollo ocurre en
+macOS/Linux, el `.exe` se genera en un runner `windows-latest`
+(`.github/workflows/build-windows.yml`): al empujar un tag `vX.Y.Z` el
+workflow corre `build.ps1` (instala desde `wheelhouse/`, corre los tests,
+empaqueta con PyInstaller), comprime `dist\StabilityMonitor\` en un ZIP y lo
+publica como GitHub Release con `gh release create` usando el `GITHUB_TOKEN`
+del propio workflow (permiso `contents: write`). El equipo destino descarga
+ese ZIP ya construido y lo instala offline; nunca necesita internet ni Python.
+Esto convierte el flujo de las Releases en la vía recomendada y deja el build
+manual (Opción B, con el wheelhouse y el instalador de Python vendorizados)
+como alternativa para quien deba construir en su propia máquina Windows.
+`build.ps1` se hizo robusto para ambos entornos: usa el launcher `py -3.12`
+si existe y cae a `python` (el runner de CI) si no.

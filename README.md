@@ -9,6 +9,12 @@ Se despliega como **ejecutable portable para Windows 10 Pro x64, 100 % offline**
 un `dist/` copiable por USB que no requiere instalar Python ni nada en la
 máquina destino, sin ninguna dependencia de internet en tiempo de ejecución.
 
+**El repositorio incluye todo lo necesario para construirlo sin internet**:
+`wheelhouse/` trae las ~47 dependencias exactas (runtime + PyInstaller) como
+wheels de Windows/cp312, y `vendor/` trae el instalador oficial de Python
+3.12.10 para Windows. `build.ps1` instala exclusivamente desde `wheelhouse/`
+y nunca contacta PyPI.
+
 ## Capacidades
 
 - **Checkers** de FTP/FTPS/SFTP/WebDAV(S) y PostgreSQL/MySQL/MariaDB/SQL Server/
@@ -69,18 +75,29 @@ python -m app.check --file conn.json
 
 Códigos de salida: `0` UP · `1` DEGRADED · `2` DOWN · `3` configuración inválida.
 
-## Empaquetado y despliegue (Windows offline)
+## Empaquetado y despliegue (Windows, 100 % offline)
 
-En la máquina de desarrollo (con internet):
+**Opción recomendada — descargar el ejecutable ya construido.** Cada tag
+`vX.Y.Z` dispara un workflow de GitHub Actions que compila el paquete en un
+runner **Windows real** (PyInstaller no compila de forma cruzada) y publica el
+ZIP en [Releases](https://github.com/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav/releases).
+Descárgalo desde cualquier máquina con internet, cópialo por USB a la máquina
+destino y ejecuta `install.ps1` — el destino nunca necesita internet ni Python.
+
+**Opción B — construirlo tú mismo** (en una máquina Windows, también sin
+internet gracias al wheelhouse y al instalador de Python vendorizados):
 
 ```powershell
+# si Python 3.12 no está instalado, usa el instalador incluido:
+vendor\python-3.12.10-amd64.exe
 powershell -ExecutionPolicy Bypass -File .\build.ps1   # → dist\StabilityMonitor\ (PyInstaller onedir)
 ```
 
-En la máquina Windows destino (sin internet, sin admin):
+Instalación en la máquina destino (sin internet, sin admin), sea el ZIP de
+Releases descomprimido o tu propio `dist\StabilityMonitor\`:
 
 ```powershell
-# tras copiar dist\StabilityMonitor\ por USB, dentro de esa carpeta:
+# dentro de la carpeta StabilityMonitor\:
 powershell -ExecutionPolicy Bypass -File .\install.ps1  # autoarranque de usuario + inicia la app
 ```
 
