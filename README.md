@@ -1,288 +1,352 @@
+<!-- StabilityMonitor monitorea conexiones FTP/SFTP/WebDAV y bases de datos desde Windows, offline, con historial, alertas y reportes de estabilidad. -->
 <div align="center">
-  <img src="assets/dashboard.png" alt="Panel de StabilityMonitor con seis conexiones monitoreadas en estados verde, ámbar y rojo" width="800"/>
-</div>
+  <img src="assets/dashboard.png" alt="Panel principal de StabilityMonitor con tarjetas de conexiones monitoreadas y estados de disponibilidad" width="800"/>
 
-<div align="center">
+  <h1>StabilityMonitor</h1>
+  <p><strong>Monitor offline para saber si tus conexiones FTP, SFTP, WebDAV y bases de datos están disponibles, sin sobrecargar los sistemas que vigila.</strong></p>
 
-# StabilityMonitor
-
-**Vigila tus servidores FTP/SFTP/WebDAV y tus bases de datos desde un solo panel — sin sobrecargarlos nunca, y funcionando 100 % offline en Windows.**
-
-[![Release](https://img.shields.io/github/v/release/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav?color=blue&label=release)](https://github.com/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav/releases)
-[![Build Windows](https://img.shields.io/github/actions/workflow/status/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav/build-windows.yml?label=build%20windows)](https://github.com/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav/actions/workflows/build-windows.yml)
-![Estado](https://img.shields.io/badge/estado-beta-yellow)
-![Plataforma](https://img.shields.io/badge/plataforma-Windows%20x64%20offline-0078D6)
-![Python](https://img.shields.io/badge/python-3.12-3776AB)
-![Pruebas](https://img.shields.io/badge/pruebas-127%20passing-brightgreen)
-
+  ![Version](https://img.shields.io/badge/version-2.0.0-blue)
+  ![Status](https://img.shields.io/badge/status-beta-green)
+  ![License](https://img.shields.io/badge/license-no_declarada-orange)
+  ![Windows](https://img.shields.io/badge/platform-Windows_10_Pro_x64-0078D6)
+  ![Tests](https://img.shields.io/badge/tests-147_passing-brightgreen)
 </div>
 
 ---
 
 ## 📋 Tabla de Contenidos
 
-- [¿Qué es StabilityMonitor?](#-qué-es-stabilitymonitor)
-- [Demo en vivo](#-demo-en-vivo)
-- [Características principales](#-características-principales)
-- [Capturas de pantalla](#-capturas-de-pantalla)
-- [Instalación rápida](#-instalación-rápida)
-- [Cómo usar](#-cómo-usar)
-- [Arquitectura](#️-arquitectura)
-- [Roadmap](#️-roadmap)
-- [Contribuir](#-contribuir)
-- [Licencia](#-licencia)
+- [¿Qué es este proyecto?](#que-es-este-proyecto)
+- [Demo en vivo](#demo-en-vivo)
+- [Características principales](#caracteristicas-principales)
+- [Capturas de pantalla](#capturas-de-pantalla)
+- [Instalación rápida](#instalacion-rapida)
+- [Cómo usar](#como-usar)
+- [Arquitectura](#arquitectura)
+- [Roadmap](#roadmap)
+- [Contribuir](#contribuir)
+- [Licencia](#licencia)
 
 ---
 
-## 🎯 ¿Qué es StabilityMonitor?
+<a id="que-es-este-proyecto"></a>
 
-StabilityMonitor es una herramienta de **monitoreo de disponibilidad** para servidores de archivos (FTP, FTPS, SFTP, WebDAV, WebDAVS) y bases de datos (PostgreSQL, MySQL, MariaDB, SQL Server, Oracle). Te dice, en todo momento, **qué conexiones están vivas, cuáles fallaron, cuándo y por qué** — y genera reportes de estabilidad listos para enviar a tus clientes.
+## 🎯 ¿Qué es este proyecto?
 
-Está pensada para el mundo real de la infraestructura corporativa: **corre como un ejecutable portable en una máquina Windows sin acceso a internet**, y su principio de diseño número uno es que *el propio monitor jamás debe convertirse en el problema*.
+StabilityMonitor es una aplicación de monitoreo para conexiones corporativas críticas: servidores FTP, FTPS, SFTP, WebDAV, WebDAVS y bases de datos PostgreSQL, MySQL, MariaDB, SQL Server y Oracle. Ayuda a saber qué conexión está activa, cuál falló, desde cuándo, por qué falló y cómo se comportó durante el tiempo.
+
+Está diseñado para operar 24/7 en Windows 10 Pro x64, incluso en entornos sin internet, con un ejecutable portable, historial local, alertas, reportes HTML/PDF y una política de chequeo cuidadosa para que el monitor nunca se convierta en carga para los sistemas monitoreados.
 
 ### El problema que resuelve
 
-Un proceso desatendido —un ETL nocturno, una integración de archivos, un job de respaldo— depende de conexiones que pueden caer en silencio. Cuando el servidor SFTP del proveedor reinicia a las 2 a. m., nadie se entera hasta que a las 9 a. m. falta el reporte. **El daño ya ocurrió, y la causa fue una sola conexión que nadie estaba vigilando.**
+Muchas integraciones dependen de rutas FTP, SFTP, WebDAV o bases de datos que pueden fallar en silencio. Cuando el error se descubre horas después, el equipo ya perdió tiempo, trazabilidad y capacidad de explicar qué ocurrió.
 
 ### La solución
 
-StabilityMonitor sondea tus conexiones de forma continua y **con cortesía** (nunca dos sesiones simultáneas contra el mismo host, con espaciado y backoff automático), confirma las caídas con histéresis para evitar falsos positivos, y te alerta al instante — con la causa clasificada (DNS, timeout, TLS, autenticación, ruta/tabla inexistente…), no solo un genérico "está caído".
+StabilityMonitor centraliza esas conexiones en un panel local, las prueba de forma periódica, clasifica la causa de los fallos, conserva historial e incidentes, y genera reportes de estabilidad listos para compartir con clientes o áreas internas.
 
 ### ¿Para quién es?
 
 | Audiencia | Beneficio clave |
-|-----------|-----------------|
-| **Sysadmins e ingenieros de sistemas** | Visibilidad centralizada de decenas de conexiones legacy sin montar infraestructura pesada ni tocar internet. |
-| **Equipos DevOps / SRE** | Detección temprana de fallos (en minutos, no horas) con causa clasificada e historial completo de uptime y latencia. |
-| **DBAs** | Saber que PostgreSQL, SQL Server u Oracle siguen respondiendo —y que la tabla crítica sigue ahí— con chequeos de solo lectura que nunca escriben. |
-| **MSPs y proveedores de servicios** | Reportes de estabilidad por cliente (un solo HTML) para demostrar el uptime de los sistemas que administran. |
+|-----------|----------------|
+| Equipos de infraestructura | Detectan caídas de conexiones críticas sin montar una plataforma pesada. |
+| Operaciones y soporte | Ven estado, causa, historial y tiempo de indisponibilidad desde un solo panel. |
+| DBAs y administradores de archivos | Monitorean disponibilidad y objetivos concretos con chequeos de bajo impacto. |
+| Proveedores de servicio | Entregan reportes por cliente con evidencia de disponibilidad e incidentes. |
 
 ---
+
+<a id="demo-en-vivo"></a>
 
 ## 🎬 Demo en vivo
 
-La forma más rápida de ver el producto funcionando —con datos realistas, sin configurar un solo servidor— es el **modo demo**, que siembra 6 conexiones ficticias de dos clientes con 30 días de historial sintético, incidentes y gráficas:
+El proyecto incluye un modo demo para evaluar el panel sin conectarse a servidores reales. Siembra conexiones ficticias, historial, incidentes y métricas de ejemplo.
 
 ```bash
 python -m app.main --demo
-# Abre http://127.0.0.1:8090 en tu navegador
 ```
 
+Después abre `http://127.0.0.1:8090`.
+
 <div align="center">
-  <img src="assets/demo.gif" alt="Flujo del panel: estado de las conexiones, detalle con gráficas de latencia y disponibilidad, y filtro por estado" width="760"/>
-  <p><em>Del panel de estado al detalle con gráficas de latencia y disponibilidad, en segundos.</em></p>
+  <img src="assets/demo.gif" alt="Demo del panel de StabilityMonitor navegando entre tarjetas, detalle de conexión y gráficas" width="700"/>
+  <p><em>Flujo principal: revisar estado general, abrir el detalle de una conexión y analizar latencia, disponibilidad e incidentes.</em></p>
 </div>
 
-> 💡 ¿Prefieres el ejecutable ya construido? Descárgalo desde la [página de Releases](https://github.com/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav/releases) y ejecútalo en Windows — sin internet ni Python.
-
 ---
+
+<a id="caracteristicas-principales"></a>
 
 ## ✨ Características principales
 
 | Feature | Descripción |
 |---------|-------------|
-| 🛡️ **Cortesía por diseño** | El monitor nunca sobrecarga lo que vigila: una sola sesión por host, espaciado y *jitter* entre chequeos, y *backoff* progresivo cuando un servidor ya está caído. |
-| 🔌 **Multiprotocolo** | Diez protocolos con un chequeo definido para cada uno: FTP, FTPS, SFTP (llave o contraseña), WebDAV, WebDAVS y las bases PostgreSQL, MySQL, MariaDB, SQL Server y Oracle. |
-| 🎯 **Verificación de objetivos** | No solo "¿responde el puerto?": comprueba que la carpeta del cliente (`/clientes/acme/entrada`) o la tabla crítica (`ventas.pedidos`) siguen ahí. |
-| 🚨 **Alertas con causa** | Una sola alerta por incidente (toast nativa + sonido + ícono de bandeja en Windows), con la causa clasificada y la duración exacta al recuperarse. |
-| 📊 **Reportes para clientes** | Un único archivo HTML autocontenido por cliente y rango de fechas: uptime, incidentes, downtime, MTTR y comparativa contra el período anterior. Se abre sin internet. |
-| 💾 **Offline y portable** | Ejecutable autocontenido para Windows 10 Pro x64: sin instalar Python, sin internet en tiempo de ejecución, sin servidor de licencias. Los secretos se cifran con DPAPI. |
+| 🛡️ **Monitoreo de bajo impacto** | Serializa chequeos por host, aplica espaciado, jitter y backoff para evitar duplicar sesiones o aumentar la carga durante una caída. |
+| 🔌 **Soporte multiprotocolo** | Monitorea FTP, FTPS, SFTP, WebDAV, WebDAVS, PostgreSQL, MySQL, MariaDB, SQL Server y Oracle desde una sola interfaz. |
+| 🎯 **Objetivos verificables** | Comprueba rutas, carpetas, esquemas o tablas específicas para distinguir entre “el servidor responde” y “el recurso esperado existe”. |
+| 🚨 **Incidentes y alertas con causa** | Clasifica fallos como DNS, timeout, autenticación, TLS, ruta inexistente u otros, y registra apertura/cierre de incidentes. |
+| 📊 **Reportes HTML y PDF** | Genera reportes autocontenidos por cliente con uptime, downtime, MTTR, incidentes y metodología de cálculo. |
+| 🔄 **Exportación e importación** | Permite respaldar configuraciones en JSON, importar conexiones y conservar alias virtuales sin crear sesiones adicionales. |
 
 ---
+
+<a id="capturas-de-pantalla"></a>
 
 ## 📸 Capturas de pantalla
 
 ### Panel principal
 <div align="center">
-  <img src="assets/dashboard.png" alt="Panel con una tarjeta por conexión, estado en color, uptime 24h/7d/30d y banner de incidente abierto" width="750"/>
-  <p><em>Una tarjeta por conexión con estado (verde/ámbar/rojo), uptime y latencia; el banner superior avisa de los incidentes abiertos. Se actualiza sola cada 10 s.</em></p>
+  <img src="assets/dashboard.png" alt="Dashboard de StabilityMonitor con tarjetas por conexión, estados, uptime y latencia" width="750"/>
+  <p><em>Vista de operación diaria: cada conexión muestra estado, disponibilidad reciente, último chequeo y cliente asociado.</em></p>
 </div>
 
-### Detalle de una conexión
+### Detalle de conexión
 <div align="center">
-  <img src="assets/detalle.png" alt="Gráfica de latencia, timeline de disponibilidad y lista de incidentes de una conexión" width="750"/>
-  <p><em>Gráfica de latencia y línea de tiempo de disponibilidad (24 h / 7 d / 30 d), con la lista de incidentes y su causa clasificada.</em></p>
+  <img src="assets/detalle.png" alt="Detalle de una conexión con gráfica de latencia, disponibilidad, incidentes y últimos chequeos" width="750"/>
+  <p><em>El detalle permite investigar una conexión sin perder contexto: latencia, línea de tiempo, incidentes y registros recientes.</em></p>
 </div>
 
-### Reporte de estabilidad del cliente
+### Reporte de estabilidad
 <div align="center">
-  <img src="assets/reporte.png" alt="Reporte HTML con disponibilidad, incidentes, downtime, MTTR y gráfica de disponibilidad diaria" width="750"/>
-  <p><em>Reporte autocontenido listo para enviar: resumen ejecutivo (uptime, incidentes, downtime, MTTR) y disponibilidad diaria, con comparativa contra el período anterior.</em></p>
+  <img src="assets/reporte.png" alt="Reporte HTML de estabilidad con métricas ejecutivas, incidentes y disponibilidad diaria" width="750"/>
+  <p><em>Reporte listo para compartir: resume disponibilidad, incidentes, downtime y comportamiento histórico por cliente.</em></p>
 </div>
 
 ---
 
+<a id="instalacion-rapida"></a>
+
 ## 🚀 Instalación rápida
 
-### Opción A — Descargar el ejecutable (recomendada)
+### Prerrequisitos
 
-La máquina destino **no necesita internet ni Python**.
+Para usar el paquete publicado:
 
-1. Desde cualquier equipo con internet, descarga `StabilityMonitor-vX.Y.Z-win64.zip` de la [página de Releases](https://github.com/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav/releases).
-2. Cópialo por USB a la máquina Windows destino y descomprímelo.
-3. Dentro de la carpeta, en PowerShell:
+- Windows 10 Pro x64.
+- PowerShell.
+- No requiere internet en la máquina destino.
+- No requiere Python instalado.
+
+Para construir desde código:
+
+- Windows x64.
+- Python 3.12, o el instalador incluido en `vendor/`.
+
+### Pasos
+
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav.git
+cd Monitor-DB-FTP-SFTP-WebDav
+```
+
+#### Opción recomendada: usar el ejecutable V2
+
+1. Descarga `StabilityMonitor-v2.0.0-win64.zip` desde la página de releases.
+2. Copia el ZIP a la máquina Windows sin internet.
+3. Descomprime la carpeta completa.
+4. Ejecuta dentro de la carpeta:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-✅ Registra el autoarranque de usuario (sin permisos de administrador), inicia la app y muestra el ícono en la bandeja. Abre el panel en **http://127.0.0.1:8090**.
+✅ Si todo está correcto, verás que se registra la tarea programada `StabilityMonitor`, se inicia la aplicación y el dashboard queda disponible en `http://127.0.0.1:8090`.
 
-### Opción B — Construir desde el código (Windows, también offline)
-
-**Prerrequisitos:** Windows x64 y Python 3.12 (el instalador oficial viene incluido en `vendor/`).
+#### Construir desde el repositorio
 
 ```powershell
-# 1. (si no tienes Python 3.12) instalarlo desde el instalador vendorizado
+# Instalar Python 3.12 si hace falta
 vendor\python-3.12.10-amd64.exe
 
-# 2. construir el ejecutable — instala desde wheelhouse/, sin tocar internet
+# Construir el ejecutable usando dependencias locales de wheelhouse/
 powershell -ExecutionPolicy Bypass -File .\build.ps1
 
-# 3. instalar el resultado
+# Instalar el resultado
 cd dist\StabilityMonitor
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-### Para desarrollo (cualquier SO con Python 3.12)
-
-```bash
-python3.12 -m venv .venv
-.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-.venv/bin/python -m pytest        # 127 pruebas unitarias
-.venv/bin/python -m app.main      # dashboard en http://127.0.0.1:8090
-```
-
 ---
+
+<a id="como-usar"></a>
 
 ## 💡 Cómo usar
 
-### Caso básico — probar un chequeo puntual
+### Caso de uso básico
 
-Verifica una conexión ad-hoc, sin guardar nada, desde un archivo JSON:
+Ejecuta el monitor y abre el panel local:
 
 ```bash
-python -m app.check --file conn.json
+python -m app.main
 ```
+
+Luego entra a:
+
+```text
+http://127.0.0.1:8090
+```
+
+Desde el dashboard selecciona **Nueva conexión**, define protocolo, host, puerto o instancia, usuario, secreto, objetivos e intervalo. Antes de guardar puedes usar **Probar conexión** para validar el chequeo completo.
+
+### Casos de uso avanzados
+
+#### Importar conexiones desde JSON
 
 ```json
 {
-  "protocol": "SFTP",
-  "host": "sftp-prod-01.payments.internal",
-  "port": 22,
-  "username": "monitor",
-  "secret": "...",
-  "targets": ["/clientes/acme/entrada"],
-  "timeout_s": 10
+  "app": "StabilityMonitor",
+  "version": "2.0.0",
+  "settings": {},
+  "connections": [
+    {
+      "name": "SFTP Producción",
+      "client": "Cliente A",
+      "protocol": "SFTP",
+      "host": "10.0.0.10",
+      "port": 22,
+      "username": "monitor",
+      "secret": "contraseña-local",
+      "auth_type": "password",
+      "targets_json": "[\"/entrada\"]",
+      "aliases_json": "[]",
+      "interval_s": 60,
+      "timeout_s": 10,
+      "retries": 2
+    }
+  ]
 }
 ```
 
-El resultado indica el estado, la latencia y el resultado por cada objetivo. Códigos de salida: `0` UP · `1` DEGRADED · `2` DOWN · `3` configuración inválida.
+Las contraseñas incluidas en un archivo de importación se cifran localmente al restaurar. Las exportaciones normales no incluyen secretos.
 
-### Añadir y monitorear conexiones (desde el panel)
+#### Configurar SQL Server con instancia
 
-Abre `http://127.0.0.1:8090`, pulsa **Nueva conexión**, elige el protocolo y completa host, usuario, secreto e intervalo. El botón **Probar conexión** ejecuta el chequeo completo antes de guardar. A partir de ahí, la conexión se monitorea sola con la política de cortesía.
-
-### Verificar rutas y tablas concretas
-
-En el campo **Objetivos** de una conexión, uno por línea:
+Cuando no tengas puerto fijo, usa la instancia:
 
 ```text
-/clientes/acme/entrada      ← ruta en un servidor de archivos
-ventas.pedidos              ← tabla en una base de datos
+Host: 10.128.2.11
+Puerto: dejar vacío
+Instancia SQL Server: sigevas2022
+Base de datos: opcional
 ```
 
-Una ruta o tabla inexistente marca la conexión como **DEGRADED** con causa `ruta/objeto inexistente` — distinta de "servidor caído", para que el reporte cuente la historia correcta.
+El monitor conectará usando `10.128.2.11\sigevas2022`. Si defines un puerto explícito, el puerto tiene prioridad.
 
-Los **alias virtuales** son nombres lógicos por conexión. Sirven para buscar,
-mostrar, auditar y reportar una conexión con nombres de negocio sin cambiar el
-host, puerto, usuario, ruta, base de datos ni query real. Editar alias no crea
-otra conexión ni dispara sesiones adicionales.
+#### Verificar objetivos concretos
 
-### Generar un reporte de cliente
+```text
+/FONVIVIENDA_CAVIS_UT
+/RESOLUCIONES FONVIVIENDAXAÑOS
+ventas.pedidos
+```
 
-Desde el panel: **Reportes → elige cliente y rango → Generar**. El resultado queda en `reports/` como HTML autocontenido y como PDF descargable, ambos sin depender de internet.
+Las rutas aplican a servidores de archivos y las tablas/esquemas a bases de datos. Un objetivo inexistente marca la conexión como `DEGRADED`, no como caída total.
+
+#### Generar reportes
+
+Desde el panel abre **Reportes**, elige cliente y rango de fechas, y genera el resultado. El archivo queda en `reports/` como HTML autocontenido y PDF descargable.
 
 ---
 
+<a id="arquitectura"></a>
+
 ## 🏗️ Arquitectura
 
-Un solo proceso Python sirve el panel web local y orquesta los chequeos; todo el estado vive en un archivo SQLite. El adaptador de plataforma permite que lo específico de Windows (cifrado DPAPI, notificaciones, bandeja) conviva con el desarrollo en otros sistemas.
+StabilityMonitor corre como un solo proceso local: sirve el panel web, agenda chequeos, registra resultados, maneja incidentes y genera reportes. Todo el estado vive junto al ejecutable para facilitar instalación, respaldo y operación offline.
 
 ```mermaid
 flowchart LR
-    UI["Panel web local<br/>(FastAPI · 127.0.0.1:8090)"] --> SCHED
-    SCHED["Planificador<br/>(APScheduler + cortesía)"] --> CHK
-    CHK["Checkers<br/>FTP · SFTP · WebDAV · SQL"] -->|chequean| SRV["Tus servidores<br/>y bases de datos"]
-    CHK --> INC["Incidentes + Alertas<br/>(máquina de estados)"]
-    SCHED --> DB[("SQLite<br/>historial + secretos cifrados")]
-    INC --> DB
-    INC --> NOTIF["Toast · sonido · bandeja<br/>(Windows) / SMTP · webhook"]
-    DB --> REP["Reportes HTML + PDF<br/>autocontenidos"]
+    UI["Panel local<br/>127.0.0.1:8090"] --> API["FastAPI + Uvicorn"]
+    API --> SCHED["Scheduler<br/>APScheduler"]
+    SCHED --> THROTTLE["Política de cortesía<br/>lock, spacing, jitter, backoff"]
+    THROTTLE --> CHECKERS["Checkers<br/>FTP/SFTP/WebDAV/DB"]
+    CHECKERS --> TARGETS["Servidores y bases de datos"]
+    CHECKERS --> DB[("SQLite<br/>monitor.db")]
+    DB --> INCIDENTS["Incidentes y alertas"]
+    DB --> REPORTS["Reportes HTML/PDF"]
+    INCIDENTS --> NOTIFY["Toast, bandeja, SMTP, webhook"]
 ```
 
 ### Stack tecnológico
 
 | Capa | Tecnología | Propósito |
 |------|-----------|-----------|
-| Panel + API | FastAPI + Uvicorn | Dashboard local y API REST en `127.0.0.1:8090`. |
-| Frontend | HTML/CSS/JS *vanilla* + Chart.js (local) | Interfaz sin frameworks de build ni CDNs. |
-| Planificación | APScheduler | Orquesta los chequeos con jitter, espaciado y backoff. |
-| Protocolos de archivos | `ftplib`, `paramiko`, `httpx` | FTP/FTPS, SFTP y WebDAV(S). |
-| Drivers de BD | `pg8000`, `PyMySQL`, `python-tds`, `oracledb` | PostgreSQL, MySQL/MariaDB, SQL Server y Oracle (Python puro). |
-| Persistencia | SQLite (modo WAL) | Un solo archivo: conexiones, historial, incidentes y secretos cifrados. |
-| Secretos | DPAPI (Windows) | Cifrado ligado a la máquina y usuario; nunca en texto plano. |
-| Empaquetado | PyInstaller (*onedir*) | Ejecutable portable autocontenido para Windows. |
-
-> Más detalle en [`docs/DECISIONS.md`](docs/DECISIONS.md) (decisiones de diseño) y [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) (manual de usuario).
+| Panel y API | FastAPI + Uvicorn | Dashboard local y endpoints de operación. |
+| Frontend | HTML, CSS, JavaScript y Chart.js local | Interfaz sin CDN ni build frontend. |
+| Planificación | APScheduler | Agenda chequeos sin solapar una conexión consigo misma. |
+| Protocolos de archivos | `ftplib`, Paramiko, HTTPX | FTP/FTPS, SFTP y WebDAV(S). |
+| Bases de datos | pg8000, PyMySQL, python-tds, python-oracledb | Chequeos de PostgreSQL, MySQL/MariaDB, SQL Server y Oracle. |
+| Persistencia | SQLite en modo WAL | Conexiones, historial, incidentes, ajustes y alertas. |
+| Secretos | DPAPI en Windows; Fernet en desarrollo | Cifrado local de credenciales. |
+| Empaquetado | PyInstaller | Ejecutable portable para Windows x64. |
 
 ---
+
+<a id="roadmap"></a>
 
 ## 🗺️ Roadmap
 
 ### ✅ Completado
-- [x] Checkers de FTP, FTPS, SFTP y WebDAV(S)
-- [x] Checkers de PostgreSQL, MySQL, MariaDB, SQL Server y Oracle
-- [x] Política de cortesía (lock por host, espaciado, jitter, rate limit, backoff)
-- [x] Máquina de incidentes con histéresis y clasificación de causas
-- [x] Panel web con CRUD, estado en vivo, gráficas y "Probar conexión"
-- [x] Alertas: toast/sonido/bandeja en Windows, SMTP y webhook opcionales
-- [x] Reportes HTML/PDF autocontenidos por cliente + export CSV
-- [x] Alias virtuales por conexión sin sesiones adicionales
-- [x] Empaquetado offline para Windows y publicación automática en Releases (CI)
 
-### 🔄 En progreso / verificación
-- [ ] Smoke test en una máquina Windows 10 Pro limpia (autoarranque tras reinicio, doble clic)
-- [ ] Verificación con Wireshark de que no se genera tráfico fuera de los chequeos configurados
+- [x] Dashboard local con estado en vivo, filtros y detalle por conexión.
+- [x] Monitoreo de FTP, FTPS, SFTP, WebDAV y WebDAVS.
+- [x] Monitoreo de PostgreSQL, MySQL, MariaDB, SQL Server y Oracle.
+- [x] Campo de instancia para SQL Server cuando no hay puerto fijo.
+- [x] Política de bajo impacto: una sesión por host, espaciado, rate limit, jitter y backoff.
+- [x] Historial, incidentes, alertas, logs rotativos y retención configurable.
+- [x] Reportes HTML y PDF por cliente.
+- [x] Exportación/importación JSON de configuraciones.
+- [x] Alias virtuales sin duplicar sesiones ni alterar parámetros técnicos.
+- [x] Empaquetado offline para Windows x64 y release V2.
+
+### 🔄 En progreso
+
+- [ ] Validación operativa prolongada en Windows 10 Pro x64 con monitoreo 24/7.
+- [ ] Ajustes finos de diagnóstico para ambientes con rutas legacy y codificaciones mixtas.
 
 ### 🔮 Próximamente
-- [ ] Firma del ejecutable de Windows (Authenticode)
-- [ ] Más canales de alerta y plantillas de reporte
+
+- [ ] Firma digital del ejecutable.
+- [ ] Plantillas adicionales de reportes para distintos perfiles de cliente.
+- [ ] Nuevos canales de alerta corporativos según necesidad de operación.
 
 ---
 
+<a id="contribuir"></a>
+
 ## 🤝 Contribuir
 
-Las contribuciones son bienvenidas. Antes de un cambio grande, abre un *issue* para discutirlo.
+Las contribuciones son bienvenidas. Para cambios funcionales, abre primero un issue o una conversación de diseño para alinear alcance, impacto en monitoreo y cobertura de pruebas.
 
 ```bash
 git clone https://github.com/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav.git
 cd Monitor-DB-FTP-SFTP-WebDav
-python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-.venv/bin/python -m pytest        # las pruebas deben quedar en verde
+python -m venv .venv
+.venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+.venv/bin/python -m pytest
 ```
 
-El código va en inglés; la UI y la documentación de usuario, en español. Consulta [`docs/DECISIONS.md`](docs/DECISIONS.md) para entender las decisiones de diseño antes de proponer cambios.
+En Windows PowerShell:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\pip.exe install -r requirements.txt -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest
+```
+
+Antes de proponer cambios grandes, revisa [`docs/DECISIONS.md`](docs/DECISIONS.md) y [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
 
 ---
 
+<a id="licencia"></a>
+
 ## 📄 Licencia
 
-> ⚠️ Este proyecto **aún no declara una licencia formal**. Sin un archivo `LICENSE`, por defecto se reservan todos los derechos. Si deseas usarlo, distribuirlo o contribuir, abre un *issue* para acordar los términos (por ejemplo, adoptar MIT o Apache-2.0).
+Este proyecto aún no incluye un archivo `LICENSE`. Hasta que se declare una licencia formal, se consideran reservados todos los derechos.
 
 ---
 
 <div align="center">
   <p>Hecho con ❤️ por <a href="https://github.com/castellanosfelipe">castellanosfelipe</a></p>
-  <p><em>El monitor que nunca es el problema.</em></p>
 </div>
