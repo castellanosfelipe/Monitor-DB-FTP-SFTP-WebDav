@@ -372,15 +372,15 @@ async function openDetail(id) {
     const incidents = h.incidents.slice(-20).reverse();
     $("detail-body").innerHTML = `
       <h2>Incidentes</h2>
-      ${incidents.length ? `<table class="data"><tr><th>Inicio</th><th>Fin</th><th>Duración</th><th>Causa</th><th>Detalle</th></tr>
+      ${incidents.length ? `<div class="table-scroll"><table class="data"><tr><th>Inicio</th><th>Fin</th><th>Duración</th><th>Causa</th><th>Detalle</th></tr>
         ${incidents.map((i) => `<tr><td>${fmtTs(i.started_at)}</td><td>${i.ended_at ? fmtTs(i.ended_at) : "<b>abierto</b>"}</td>
           <td>${fmtDur(i.duration_s)}</td><td>${esc(i.error_type || "—")}</td><td>${esc(i.first_error_msg)}</td></tr>`).join("")}
-      </table>` : '<p class="muted">Sin incidentes registrados.</p>'}
+      </table></div>` : '<p class="muted">Sin incidentes registrados.</p>'}
       <h2 style="margin-top:14px">Últimos chequeos (24 h)</h2>
-      ${checks.length ? `<table class="data"><tr><th>Hora</th><th>Estado</th><th>Latencia</th><th>Causa</th></tr>
+      ${checks.length ? `<div class="table-scroll"><table class="data"><tr><th>Hora</th><th>Estado</th><th>Latencia</th><th>Causa</th></tr>
         ${checks.map((c) => `<tr><td>${fmtTs(c.ts_utc)}</td><td class="st-${esc(c.status)}">${esc(c.status)}</td>
           <td>${fmtMs(c.latency_ms)}</td><td>${esc(c.error_type ? c.error_type + " — " + c.error_msg : "")}</td></tr>`).join("")}
-      </table>` : '<p class="muted">Aún no hay chequeos en las últimas 24 h.</p>'}`;
+      </table></div>` : '<p class="muted">Aún no hay chequeos en las últimas 24 h.</p>'}`;
   } catch (e) {
     $("detail-body").innerHTML = '<p class="muted">No se pudo cargar el historial.</p>';
   }

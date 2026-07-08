@@ -135,6 +135,8 @@ def test_report_html_is_self_contained_and_complete(db, tmp_path, monkeypatch):
     assert "conexión rechazada" in html  # causa traducida
     assert "backoff" in html  # metodología en el pie (RF-6)
     assert "99.4" in html  # uptime: 1h en 7d → 99.40%
+    assert html.count('class="table-scroll"') == 2
+    assert "overflow:auto" in html
 
     pdf = path.with_suffix(".pdf")
     assert pdf.is_file()

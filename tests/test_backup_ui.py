@@ -27,3 +27,12 @@ def test_dashboard_exposes_virtual_alias_and_pdf_report_controls():
     assert "active_aliases" in js
     assert "pdf_file" in js
     assert ">PDF<" in js
+
+
+def test_dashboard_detail_tables_are_scrollable():
+    css = Path("static/css/app.css").read_text(encoding="utf-8")
+    js = Path("static/js/app.js").read_text(encoding="utf-8")
+
+    assert ".table-scroll" in css
+    assert "overflow: auto" in css
+    assert js.count('class="table-scroll"') >= 2

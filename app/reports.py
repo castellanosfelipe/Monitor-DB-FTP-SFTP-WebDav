@@ -463,10 +463,14 @@ def render_report(stats: PeriodStats, previous: PeriodStats | None, branding: Br
   .kpi .value {{ font-size:30px; font-weight:600; margin:2px 0; }}
   .kpi .delta {{ font-size:11.5px; }}
   .muted {{ color:{_MUTED}; }}
+  .table-scroll {{ max-width:100%; max-height:420px; overflow:auto; border:1px solid {_GRID};
+                   border-radius:8px; margin-top:6px; }}
   table {{ width:100%; border-collapse:collapse; font-size:12.5px; margin-top:6px; }}
+  .table-scroll table {{ min-width:760px; margin:0; }}
   th, td {{ text-align:left; padding:6px 8px; border-bottom:1px solid {_GRID};
             vertical-align:top; }}
-  th {{ color:{_INK_2}; font-weight:600; }}
+  th {{ color:{_INK_2}; font-weight:600; background:#ffffff; }}
+  .table-scroll tr:first-child th {{ position:sticky; top:0; z-index:1; }}
   td.msg {{ color:{_INK_2}; max-width:340px; word-break:break-word; }}
   .foot {{ margin-top:30px; padding-top:12px; border-top:1px solid {_GRID};
            font-size:11.5px; color:{_INK_2}; }}
@@ -507,18 +511,18 @@ def render_report(stats: PeriodStats, previous: PeriodStats | None, branding: Br
   {svg_daily_latency(stats.daily_latency, previous.daily_latency if previous else None)}
 
   <h2>Detalle por conexión</h2>
-  <table>
+  <div class="table-scroll"><table>
     <tr><th>Conexión</th><th>Alias</th><th>Protocolo</th><th>Disponibilidad</th>
         <th>Incidentes</th><th>Downtime</th><th>MTTR</th></tr>
     {conn_rows}
-  </table>
+  </table></div>
 
   <h2>Incidentes del período</h2>
-  <table>
+  <div class="table-scroll"><table>
     <tr><th>Conexión</th><th>Alias</th><th>Inicio</th><th>Fin</th><th>Duración en el período</th>
         <th>Causa</th><th>Detalle</th></tr>
     {incident_rows}
-  </table>
+  </table></div>
 
   <div class="foot">
     <b>Metodología.</b> El downtime de un incidente se mide desde el primer chequeo
