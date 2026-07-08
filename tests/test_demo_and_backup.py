@@ -109,3 +109,47 @@ def test_restore_rejects_foreign_files(tmp_path):
     client = TestClient(create_app(make_ctx(tmp_path)))
     resp = client.post("/api/restore", json={"app": "otra-cosa"})
     assert resp.status_code == 422
+
+
+def test_restore_can_import_plain_secret_and_reexport_still_excludes_it(tmp_path):
+    ctx = make_ctx(tmp_path)
+
+    class PlainStore:
+        def encrypt(self, s):
+            return "plain:" + s
+
+        def decrypt(self, t):
+            return t[len("plain:"):]
+
+    ctx.secret_store = PlainStore()
+    client = TestClient(create_app(ctx))
+    payload = {
+        "app": "StabilityMonitor",
+        "settings": {},
+        "connections": [
+            {
+                "name": "FTP Credencial",
+                "client": "QA",
+                "protocol": "FTP",
+                "host": "10.0.0.1",
+                "port": 21,
+                "username": "monitor",
+                "secret": "clave-importada",
+                "targets_json": "[\"/\"]",
+                "aliases_json": "[]",
+            }
+        ],
+    }
+
+    result = client.post("/api/restore", json=payload)
+    assert result.status_code == 200, result.text
+    assert result.json()["connections_created"] == 1
+    assert result.json()["secrets_imported"] == 1
+
+    restored = ctx.db.list_connections()[0]
+    assert restored.secret_encrypted == "plain:clave-importada"
+    assert restored.enabled is False
+
+    backup = client.get("/api/backup")
+    assert "clave-importada" not in backup.text
+    assert "secret" not in str(backup.json()["connections"][0]).lower()

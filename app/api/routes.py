@@ -52,6 +52,15 @@ def _encrypt_secret(ctx: Any, plain: str | None) -> str | None:
     return ctx.secret_store.encrypt(plain)
 
 
+def _import_plain_secret(item: dict[str, Any]) -> str | None:
+    """Plaintext secret accepted only on import; normal exports never include it."""
+    for key in ("secret", "password", "contrasena", "contraseña", "plain_secret"):
+        value = item.get(key)
+        if value is not None and str(value) != "":
+            return str(value)
+    return None
+
+
 def _merge_alias_metadata(
     aliases: list[ConnectionAlias], existing: list[ConnectionAlias] | None = None
 ) -> list[ConnectionAlias]:
@@ -635,6 +644,7 @@ def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
     }
     created = 0
     skipped = 0
+    secrets_imported = 0
     for item in payload.get("connections") or []:
         try:
             aliases_raw = item.get("aliases_json")
@@ -674,6 +684,10 @@ def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
         if validate_connection(cfg):
             skipped += 1
             continue
+        plain_secret = _import_plain_secret(item)
+        if plain_secret:
+            cfg.secret_encrypted = _encrypt_secret(ctx, plain_secret)
+            secrets_imported += 1
         ctx.db.create_connection(cfg)
         existing.add((cfg.protocol.value, cfg.host, cfg.port, cfg.name))
         created += 1
@@ -681,8 +695,9 @@ def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "connections_created": created,
         "connections_skipped": skipped,
+        "secrets_imported": secrets_imported,
         "settings_applied": applied_settings,
-        "warning": "Las conexiones restauradas quedan en pausa: reingresa los secretos y reanúdalas.",
+        "warning": "Las conexiones restauradas quedan en pausa. Si el archivo incluía contraseñas, se cifraron localmente; reanuda las conexiones tras verificarlas.",
     }
 
 

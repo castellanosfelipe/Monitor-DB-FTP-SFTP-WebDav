@@ -492,7 +492,8 @@ async function restoreBackupFile(file, resultEl) {
     const data = JSON.parse(await file.text());
     const r = await api("/api/restore", { method: "POST", body: JSON.stringify(data) });
     resultEl.textContent =
-      `Creadas ${r.connections_created}, omitidas ${r.connections_skipped}. ${r.warning}`;
+      `Creadas ${r.connections_created}, omitidas ${r.connections_skipped}, ` +
+      `contraseñas importadas ${r.secrets_imported || 0}. ${r.warning}`;
     refresh();
   } catch (e) {
     resultEl.textContent = "Error: " +
