@@ -1,10 +1,6 @@
 <!-- StabilityMonitor monitorea conexiones FTP/SFTP/WebDAV y bases de datos desde Windows, offline, con historial, alertas y reportes de estabilidad. -->
 <div align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="assets/banner-light.png">
-    <img src="assets/banner-light.png" alt="Banner de Felipe Castellanos, Growth Product Manager" width="100%">
-  </picture>
+  <img src="assets/dashboard.png" alt="Panel principal de StabilityMonitor con tarjetas de conexiones monitoreadas y estados de disponibilidad" width="800"/>
 
   <h1>StabilityMonitor</h1>
   <p><strong>Monitor offline para saber si tus conexiones FTP, SFTP, WebDAV y bases de datos están disponibles, sin sobrecargar los sistemas que vigila.</strong></p>
