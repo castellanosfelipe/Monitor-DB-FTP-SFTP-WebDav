@@ -142,7 +142,7 @@ cd Monitor-DB-FTP-SFTP-WebDav
 
 #### Opción recomendada: usar el ejecutable V2
 
-1. Descarga `StabilityMonitor-v2.0.0-win64.zip` desde la página de releases.
+1. Descarga el ejecutable V2 desde [StabilityMonitor-v2.0.0-win64.zip](https://github.com/castellanosfelipe/Monitor-DB-FTP-SFTP-WebDav/releases/download/v2.0.0/StabilityMonitor-v2.0.0-win64.zip).
 2. Copia el ZIP a la máquina Windows sin internet.
 3. Descomprime la carpeta completa.
 4. Ejecuta dentro de la carpeta:
@@ -225,19 +225,19 @@ Las contraseñas incluidas en un archivo de importación se cifran localmente al
 Cuando no tengas puerto fijo, usa la instancia:
 
 ```text
-Host: 10.128.2.11
+Host: 192.0.2.11
 Puerto: dejar vacío
-Instancia SQL Server: sigevas2022
+Instancia SQL Server: SQLEXPRESS_TEST
 Base de datos: opcional
 ```
 
-El monitor conectará usando `10.128.2.11\sigevas2022`. Si defines un puerto explícito, el puerto tiene prioridad.
+El monitor conectará usando `192.0.2.11\SQLEXPRESS_TEST`. Si defines un puerto explícito, el puerto tiene prioridad.
 
 #### Verificar objetivos concretos
 
 ```text
-/FONVIVIENDA_CAVIS_UT
-/RESOLUCIONES FONVIVIENDAXAÑOS
+/demo/entrada
+/demo/resoluciones_años
 ventas.pedidos
 ```
 

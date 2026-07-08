@@ -13,10 +13,10 @@ def make_cfg(**overrides) -> ConnectionConfig:
         name="ftp",
         client="ACME",
         protocol=Protocol.FTP,
-        host="10.128.2.5",
+        host="192.0.2.5",
         port=21,
         username="monitor",
-        targets=["/FONVIVIENDA_CAVIS_UT"],
+        targets=["/demo/entrada"],
     )
     base.update(overrides)
     return ConnectionConfig(**base)
@@ -45,10 +45,10 @@ class LegacyListingFtp:
 def test_ftp_listing_unicode_decode_error_does_not_mark_target_down():
     ftp = LegacyListingFtp()
 
-    result = FtpChecker._check_target(ftp, "/FONVIVIENDA_CAVIS_UT")
+    result = FtpChecker._check_target(ftp, "/demo/entrada")
 
     assert result.ok is True
-    assert ftp.cwd_target == "/FONVIVIENDA_CAVIS_UT"
+    assert ftp.cwd_target == "/demo/entrada"
     assert ftp.nlst_encodings[:2] == ["utf-8", "cp1252"]
     assert ftp.voidresp_calls == 1
     assert ftp.encoding == "utf-8"
@@ -73,12 +73,12 @@ class LegacyPathFtp:
 def test_ftp_cwd_retries_legacy_encoding_for_accented_targets():
     ftp = LegacyPathFtp()
 
-    result = FtpChecker._check_target(ftp, "/RESOLUCIONES FONVIVIENDAXAÑOS")
+    result = FtpChecker._check_target(ftp, "/demo/resoluciones_años")
 
     assert result.ok is True
     assert ftp.cwd_attempts == [
-        ("utf-8", "/RESOLUCIONES FONVIVIENDAXAÑOS"),
-        ("cp1252", "/RESOLUCIONES FONVIVIENDAXAÑOS"),
+        ("utf-8", "/demo/resoluciones_años"),
+        ("cp1252", "/demo/resoluciones_años"),
     ]
     assert ftp.nlst_called is True
     assert ftp.encoding == "utf-8"

@@ -83,15 +83,15 @@ def test_sqlserver_connects_by_instance_when_port_is_blank(monkeypatch):
     monkeypatch.setattr(pytds, "connect", fake_connect)
     cfg = make_cfg(
         protocol=Protocol.SQLSERVER,
-        host="10.128.2.11",
+        host="192.0.2.11",
         port=0,
-        sql_instance="sigevas2022",
+        sql_instance="SQLEXPRESS_TEST",
         db_name=None,
     )
 
     SqlServerChecker()._connect(cfg, "secret")
 
-    assert captured["dsn"] == "10.128.2.11\\sigevas2022"
+    assert captured["dsn"] == "192.0.2.11\\SQLEXPRESS_TEST"
     assert captured["port"] is None
     assert captured["pooling"] is False
 
@@ -106,14 +106,14 @@ def test_sqlserver_explicit_port_takes_precedence_over_instance(monkeypatch):
     monkeypatch.setattr(pytds, "connect", fake_connect)
     cfg = make_cfg(
         protocol=Protocol.SQLSERVER,
-        host="10.128.2.11",
+        host="192.0.2.11",
         port=1433,
-        sql_instance="sigevas2022",
+        sql_instance="SQLEXPRESS_TEST",
     )
 
     SqlServerChecker()._connect(cfg, "secret")
 
-    assert captured["dsn"] == "10.128.2.11"
+    assert captured["dsn"] == "192.0.2.11"
     assert captured["port"] == 1433
 
 

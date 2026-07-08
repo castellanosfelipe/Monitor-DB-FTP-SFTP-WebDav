@@ -85,7 +85,7 @@ def test_postgres_and_oracle_require_db_name():
 
 def test_sqlserver_instance_allows_blank_port():
     assert validate_connection(
-        make_cfg(protocol=Protocol.SQLSERVER, port=0, sql_instance="sigevas2022")
+        make_cfg(protocol=Protocol.SQLSERVER, port=0, sql_instance="SQLEXPRESS_TEST")
     ) == []
     assert validate_connection(
         make_cfg(protocol=Protocol.SQLSERVER, port=0, sql_instance="bad\\name")
@@ -138,7 +138,7 @@ def test_connection_roundtrip_through_sqlite(tmp_path):
 
 def test_sqlserver_instance_roundtrip_through_sqlite(tmp_path):
     db = Database(tmp_path / "instance.db")
-    cfg = make_cfg(protocol=Protocol.SQLSERVER, port=0, sql_instance="sigevas2022")
+    cfg = make_cfg(protocol=Protocol.SQLSERVER, port=0, sql_instance="SQLEXPRESS_TEST")
     connection_id = db.create_connection(cfg)
 
     loaded = db.get_connection(connection_id)
@@ -146,7 +146,7 @@ def test_sqlserver_instance_roundtrip_through_sqlite(tmp_path):
     assert loaded is not None
     assert loaded.protocol is Protocol.SQLSERVER
     assert loaded.port == 0
-    assert loaded.sql_instance == "sigevas2022"
+    assert loaded.sql_instance == "SQLEXPRESS_TEST"
 
 
 def test_virtual_alias_validation_rejects_duplicates_and_unsafe_values():

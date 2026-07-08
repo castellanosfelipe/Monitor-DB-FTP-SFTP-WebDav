@@ -104,11 +104,11 @@ def test_sqlserver_instance_can_be_saved_without_port(tmp_path):
     client, ctx = make_client(tmp_path)
     payload = dict(
         PAYLOAD,
-        name="SQL SIGEVAS",
+        name="SQL Demo",
         protocol="SQLSERVER",
-        host="10.128.2.11",
+        host="192.0.2.11",
         port=None,
-        sql_instance="sigevas2022",
+        sql_instance="SQLEXPRESS_TEST",
         targets=[],
     )
 
@@ -117,9 +117,9 @@ def test_sqlserver_instance_can_be_saved_without_port(tmp_path):
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["port"] == 0
-    assert body["sql_instance"] == "sigevas2022"
+    assert body["sql_instance"] == "SQLEXPRESS_TEST"
     stored = ctx.db.get_connection(body["id"])
-    assert stored.sql_instance == "sigevas2022"
+    assert stored.sql_instance == "SQLEXPRESS_TEST"
     assert stored.port == 0
 
 
