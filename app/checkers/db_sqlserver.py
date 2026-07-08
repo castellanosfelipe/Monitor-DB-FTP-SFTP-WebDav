@@ -23,9 +23,14 @@ class SqlServerChecker(DbChecker):
     validation_query = "SELECT 1"
 
     def _connect(self, cfg: ConnectionConfig, secret: str | None) -> Any:
+        dsn = cfg.host
+        port: int | None = cfg.port
+        if cfg.sql_instance and cfg.port == 0:
+            dsn = f"{cfg.host}\\{cfg.sql_instance}"
+            port = None
         return pytds.connect(
-            dsn=cfg.host,
-            port=cfg.port,
+            dsn=dsn,
+            port=port,
             database=cfg.db_name or None,
             user=cfg.username,
             password=secret,

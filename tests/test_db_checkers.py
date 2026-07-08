@@ -73,6 +73,50 @@ def test_sqlserver_classification():
     assert checker._classify(pytds.ClosedConnectionError())[0] is ErrorType.TCP_CONNECT
 
 
+def test_sqlserver_connects_by_instance_when_port_is_blank(monkeypatch):
+    captured = {}
+
+    def fake_connect(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(pytds, "connect", fake_connect)
+    cfg = make_cfg(
+        protocol=Protocol.SQLSERVER,
+        host="10.128.2.11",
+        port=0,
+        sql_instance="sigevas2022",
+        db_name=None,
+    )
+
+    SqlServerChecker()._connect(cfg, "secret")
+
+    assert captured["dsn"] == "10.128.2.11\\sigevas2022"
+    assert captured["port"] is None
+    assert captured["pooling"] is False
+
+
+def test_sqlserver_explicit_port_takes_precedence_over_instance(monkeypatch):
+    captured = {}
+
+    def fake_connect(**kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(pytds, "connect", fake_connect)
+    cfg = make_cfg(
+        protocol=Protocol.SQLSERVER,
+        host="10.128.2.11",
+        port=1433,
+        sql_instance="sigevas2022",
+    )
+
+    SqlServerChecker()._connect(cfg, "secret")
+
+    assert captured["dsn"] == "10.128.2.11"
+    assert captured["port"] == 1433
+
+
 def test_oracle_classification():
     checker = OracleChecker()
     cases = {

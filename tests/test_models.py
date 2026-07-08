@@ -83,6 +83,17 @@ def test_postgres_and_oracle_require_db_name():
     ) == []
 
 
+def test_sqlserver_instance_allows_blank_port():
+    assert validate_connection(
+        make_cfg(protocol=Protocol.SQLSERVER, port=0, sql_instance="sigevas2022")
+    ) == []
+    assert validate_connection(
+        make_cfg(protocol=Protocol.SQLSERVER, port=0, sql_instance="bad\\name")
+    )
+    assert validate_connection(make_cfg(protocol=Protocol.SQLSERVER, port=0))
+    assert validate_connection(make_cfg(protocol=Protocol.POSTGRES, port=5432, sql_instance="x"))
+
+
 def test_write_check_only_for_file_protocols():
     assert validate_connection(
         make_cfg(protocol=Protocol.MYSQL, port=3306, write_check=True)
@@ -94,6 +105,7 @@ def test_connection_roundtrip_through_sqlite(tmp_path):
     db = Database(tmp_path / "t.db")
     cfg = make_cfg(
         protocol=Protocol.SFTP, port=2222, auth_type="key", key_path="/k/id",
+        sql_instance=None,
         targets=["/in", "/out"],
         aliases=[
             ConnectionAlias("Conexión Bogotá FTP", True),
@@ -107,6 +119,7 @@ def test_connection_roundtrip_through_sqlite(tmp_path):
     assert loaded.protocol is Protocol.SFTP
     assert loaded.port == 2222
     assert loaded.targets == ["/in", "/out"]
+    assert loaded.sql_instance is None
     assert [a.name for a in loaded.aliases] == ["Conexión Bogotá FTP", "Producción Ñandú"]
     assert loaded.active_aliases == ["Conexión Bogotá FTP"]
     assert loaded.degraded_ms == 800
@@ -121,6 +134,19 @@ def test_connection_roundtrip_through_sqlite(tmp_path):
 
     db.delete_connection(connection_id)
     assert db.get_connection(connection_id) is None
+
+
+def test_sqlserver_instance_roundtrip_through_sqlite(tmp_path):
+    db = Database(tmp_path / "instance.db")
+    cfg = make_cfg(protocol=Protocol.SQLSERVER, port=0, sql_instance="sigevas2022")
+    connection_id = db.create_connection(cfg)
+
+    loaded = db.get_connection(connection_id)
+
+    assert loaded is not None
+    assert loaded.protocol is Protocol.SQLSERVER
+    assert loaded.port == 0
+    assert loaded.sql_instance == "sigevas2022"
 
 
 def test_virtual_alias_validation_rejects_duplicates_and_unsafe_values():

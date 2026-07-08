@@ -34,6 +34,7 @@ class ConnectionIn(BaseModel):
     auth_type: str = "password"
     key_path: str | None = None
     db_name: str | None = None
+    sql_instance: str | None = None
     ssl_mode: str = "preferred"
     targets: list[str] = Field(default_factory=list)
     aliases: list[AliasIn] = Field(default_factory=list)
@@ -47,17 +48,23 @@ class ConnectionIn(BaseModel):
     notes: str = ""
 
     def to_config(self, connection_id: int | None = None) -> ConnectionConfig:
+        sql_instance = (self.sql_instance or "").strip() or None
+        if self.port is None and self.protocol is Protocol.SQLSERVER and sql_instance:
+            port = 0
+        else:
+            port = self.port or DEFAULT_PORTS[self.protocol]
         return ConnectionConfig(
             id=connection_id,
             name=self.name.strip(),
             client=self.client.strip(),
             protocol=self.protocol,
             host=self.host.strip(),
-            port=self.port or DEFAULT_PORTS[self.protocol],
+            port=port,
             username=self.username,
             auth_type=self.auth_type,
             key_path=(self.key_path or "").strip() or None,
             db_name=(self.db_name or "").strip() or None,
+            sql_instance=sql_instance,
             ssl_mode=self.ssl_mode,
             targets=[t.strip() for t in self.targets if t.strip()],
             aliases=[
@@ -93,6 +100,7 @@ class ConnectionOut(BaseModel):
     auth_type: str
     key_path: str | None
     db_name: str | None
+    sql_instance: str | None
     ssl_mode: str
     targets: list[str]
     aliases: list[AliasOut]
@@ -121,6 +129,7 @@ class ConnectionOut(BaseModel):
             auth_type=cfg.auth_type,
             key_path=cfg.key_path,
             db_name=cfg.db_name,
+            sql_instance=cfg.sql_instance,
             ssl_mode=cfg.ssl_mode,
             targets=cfg.targets,
             aliases=[

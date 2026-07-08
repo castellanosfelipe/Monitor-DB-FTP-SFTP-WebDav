@@ -36,3 +36,13 @@ def test_dashboard_detail_tables_are_scrollable():
     assert ".table-scroll" in css
     assert "overflow: auto" in css
     assert js.count('class="table-scroll"') >= 2
+
+
+def test_dashboard_exposes_sqlserver_instance_field():
+    html = Path("templates/index.html").read_text(encoding="utf-8")
+    js = Path("static/js/app.js").read_text(encoding="utf-8")
+
+    assert 'id="c-sqlinstance"' in html
+    assert 'id="l-sqlinstance"' in html
+    assert "sql_instance" in js
+    assert "endpointText" in js

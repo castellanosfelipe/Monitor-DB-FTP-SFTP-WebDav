@@ -40,6 +40,16 @@ function esc(s) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+function endpointText(c) {
+  if (c.protocol === "SQLSERVER" && c.sql_instance && (!c.port || c.port === 0)) {
+    return `${c.host}\\${c.sql_instance}`;
+  }
+  const base = c.port && c.port !== 0 ? `${c.host}:${c.port}` : c.host;
+  return c.protocol === "SQLSERVER" && c.sql_instance
+    ? `${base} · instancia ${c.sql_instance}`
+    : base;
+}
+
 function applyFilters(cards) {
   const q = $("f-search").value.trim().toLowerCase();
   const client = $("f-client").value;
@@ -47,7 +57,7 @@ function applyFilters(cards) {
   const status = $("f-status").value;
   return cards.filter((c) => {
     const aliases = (c.aliases || []).map((a) => a.name).join(" ");
-    const haystack = `${c.name} ${c.client || ""} ${c.host || ""} ${aliases}`.toLowerCase();
+    const haystack = `${c.name} ${c.client || ""} ${c.host || ""} ${c.sql_instance || ""} ${aliases}`.toLowerCase();
     return (!q || haystack.includes(q)) &&
       (!client || c.client === client) &&
       (!proto || c.protocol === proto) &&
@@ -107,7 +117,7 @@ function cardHtml(c) {
       ${c.client ? `<span class="chip">${esc(c.client)}</span>` : ""}
       <span class="chip">${esc(c.protocol)}</span>
     </div>
-    <div class="muted">${esc(c.host)}:${c.port} · cada ${c.interval_s} s · último: ${fmtTs(c.last_check_ts)}</div>
+    <div class="muted">${esc(endpointText(c))} · cada ${c.interval_s} s · último: ${fmtTs(c.last_check_ts)}</div>
     ${aliasesHtml}
     <div class="card-metrics">
       <div class="metric"><span class="v">${fmtPct(c.uptime.h24)}</span><span class="k">24 h</span></div>
@@ -141,14 +151,16 @@ function protocolFields() {
   const p = $("c-protocol").value;
   const isDb = DB_PROTOCOLS.has(p);
   const isSftp = p === "SFTP";
+  const isSqlServer = p === "SQLSERVER";
   $("l-dbname").classList.toggle("hidden", !isDb);
+  $("l-sqlinstance").classList.toggle("hidden", !isSqlServer);
   $("l-health").classList.toggle("hidden", !isDb);
   $("l-write").classList.toggle("hidden", isDb);
   $("l-auth").classList.toggle("hidden", !isSftp);
   $("l-keypath").classList.toggle("hidden", !(isSftp && $("c-auth").value === "key"));
   $("l-secret").firstChild.textContent =
     isSftp && $("c-auth").value === "key" ? "Passphrase de la llave " : "Contraseña ";
-  $("c-port").placeholder = DEFAULT_PORTS[p] || "";
+  $("c-port").placeholder = isSqlServer ? "1433 o vacío si usas instancia" : (DEFAULT_PORTS[p] || "");
   $("c-targets").placeholder = isDb ? "ventas\nventas.pedidos" : "/clientes/acme/entrada";
 }
 
@@ -162,9 +174,10 @@ function openForm(cfg) {
   if (cfg) {
     $("c-name").value = cfg.name; $("c-client").value = cfg.client;
     $("c-protocol").value = cfg.protocol; $("c-host").value = cfg.host;
-    $("c-port").value = cfg.port; $("c-username").value = cfg.username;
+    $("c-port").value = cfg.port && cfg.port !== 0 ? cfg.port : ""; $("c-username").value = cfg.username;
     $("c-auth").value = cfg.auth_type; $("c-keypath").value = cfg.key_path || "";
-    $("c-dbname").value = cfg.db_name || ""; $("c-sslmode").value = cfg.ssl_mode;
+    $("c-dbname").value = cfg.db_name || ""; $("c-sqlinstance").value = cfg.sql_instance || "";
+    $("c-sslmode").value = cfg.ssl_mode;
     $("c-interval").value = cfg.interval_s; $("c-timeout").value = cfg.timeout_s;
     $("c-retries").value = cfg.retries; $("c-degraded").value = cfg.degraded_ms || "";
     $("c-targets").value = (cfg.targets || []).join("\n");
@@ -200,6 +213,7 @@ function formPayload() {
     auth_type: $("c-auth").classList ? $("c-auth").value : "password",
     key_path: $("c-keypath").value || null,
     db_name: $("c-dbname").value || null,
+    sql_instance: $("c-sqlinstance").value || null,
     ssl_mode: $("c-sslmode").value,
     targets: $("c-targets").value.split("\n").map((s) => s.trim()).filter(Boolean),
     aliases: [
@@ -360,7 +374,7 @@ async function openDetail(id) {
   const aliasText = card && card.active_aliases && card.active_aliases.length
     ? ` [${card.active_aliases.join(", ")}]`
     : "";
-  $("detail-title").textContent = card ? `${card.name}${aliasText} — ${card.host}:${card.port}` : "Detalle";
+  $("detail-title").textContent = card ? `${card.name}${aliasText} — ${endpointText(card)}` : "Detalle";
   $("detail-body").innerHTML = "Cargando…";
   $("btn-csv-checks").href = `/api/export/checks.csv?connection_id=${id}&days=30`;
   $("btn-csv-incidents").href = `/api/export/incidents.csv?connection_id=${id}`;

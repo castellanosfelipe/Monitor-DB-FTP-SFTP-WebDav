@@ -82,17 +82,21 @@ _SCHEMA_V2 = """
 ALTER TABLE connections ADD COLUMN aliases_json TEXT NOT NULL DEFAULT '[]';
 """
 
-MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2]
+_SCHEMA_V3 = """
+ALTER TABLE connections ADD COLUMN sql_instance TEXT;
+"""
+
+MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2, _SCHEMA_V3]
 
 _CONNECTION_COLUMNS = (
     "name, client, protocol, host, port, username, secret_encrypted, auth_type, "
-    "key_path, db_name, ssl_mode, targets_json, aliases_json, health_query, interval_s, "
-    "timeout_s, retries, degraded_ms, write_check, enabled, notes"
+    "key_path, db_name, sql_instance, ssl_mode, targets_json, aliases_json, health_query, "
+    "interval_s, timeout_s, retries, degraded_ms, write_check, enabled, notes"
 )
 _CONNECTION_PLACEHOLDERS = (
     ":name, :client, :protocol, :host, :port, :username, :secret_encrypted, :auth_type, "
-    ":key_path, :db_name, :ssl_mode, :targets_json, :aliases_json, :health_query, :interval_s, "
-    ":timeout_s, :retries, :degraded_ms, :write_check, :enabled, :notes"
+    ":key_path, :db_name, :sql_instance, :ssl_mode, :targets_json, :aliases_json, :health_query, "
+    ":interval_s, :timeout_s, :retries, :degraded_ms, :write_check, :enabled, :notes"
 )
 
 

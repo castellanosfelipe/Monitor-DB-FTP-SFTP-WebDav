@@ -175,6 +175,7 @@ class ConnectionConfig:
     auth_type: str = "password"
     key_path: str | None = None
     db_name: str | None = None
+    sql_instance: str | None = None
     ssl_mode: str = "preferred"
     targets: list[str] = field(default_factory=list)
     aliases: list[ConnectionAlias] = field(default_factory=list)
@@ -203,6 +204,7 @@ class ConnectionConfig:
             auth_type=row["auth_type"],
             key_path=row["key_path"],
             db_name=row["db_name"],
+            sql_instance=row["sql_instance"],
             ssl_mode=row["ssl_mode"],
             targets=json.loads(row["targets_json"] or "[]"),
             aliases=parse_aliases_json(row["aliases_json"] or "[]"),
@@ -231,6 +233,7 @@ class ConnectionConfig:
             "auth_type": self.auth_type,
             "key_path": self.key_path,
             "db_name": self.db_name,
+            "sql_instance": self.sql_instance,
             "ssl_mode": self.ssl_mode,
             "targets_json": json.dumps(self.targets, ensure_ascii=False),
             "aliases_json": aliases_to_json(self.aliases),
@@ -253,6 +256,7 @@ class ConnectionConfig:
 # Messages are in Spanish because they surface directly in the UI/CLI.
 
 _DB_TARGET_RE = re.compile(r"^[A-Za-z0-9_$#]+(\.[A-Za-z0-9_$#]+)?$")
+_SQLSERVER_INSTANCE_RE = re.compile(r"^[A-Za-z0-9_$.-]{1,128}$")
 _SELECT_RE = re.compile(r"^select\b", re.IGNORECASE)
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 _ALIAS_FORBIDDEN_CHARS = set('<>:"/\\|?*')
@@ -322,7 +326,15 @@ def validate_connection(cfg: ConnectionConfig) -> list[str]:
     elif re.search(r"\s|://", cfg.host):
         errors.append("El host no debe contener espacios ni esquema (usa solo el nombre o IP).")
 
-    if not isinstance(cfg.port, int) or not (1 <= cfg.port <= 65535):
+    if cfg.sql_instance:
+        if cfg.protocol is not Protocol.SQLSERVER:
+            errors.append("La instancia solo aplica a conexiones SQLSERVER.")
+        elif not _SQLSERVER_INSTANCE_RE.match(cfg.sql_instance):
+            errors.append("La instancia SQL Server contiene caracteres no permitidos.")
+
+    if cfg.protocol is Protocol.SQLSERVER and cfg.sql_instance and cfg.port == 0:
+        pass
+    elif not isinstance(cfg.port, int) or not (1 <= cfg.port <= 65535):
         errors.append("El puerto debe ser un número entre 1 y 65535.")
     if not (MIN_INTERVAL_S <= cfg.interval_s <= MAX_INTERVAL_S):
         errors.append(f"El intervalo debe estar entre {MIN_INTERVAL_S} s y {MAX_INTERVAL_S} s.")

@@ -95,6 +95,7 @@ def _monitoring_params_changed(before: ConnectionConfig, after: ConnectionConfig
         before.auth_type,
         before.key_path,
         before.db_name,
+        before.sql_instance,
         before.ssl_mode,
         tuple(before.targets),
         before.health_query,
@@ -113,6 +114,7 @@ def _monitoring_params_changed(before: ConnectionConfig, after: ConnectionConfig
         after.auth_type,
         after.key_path,
         after.db_name,
+        after.sql_instance,
         after.ssl_mode,
         tuple(after.targets),
         after.health_query,
@@ -300,6 +302,7 @@ def overview(request: Request) -> dict[str, Any]:
                 "protocol": cfg.protocol.value,
                 "host": cfg.host,
                 "port": cfg.port,
+                "sql_instance": cfg.sql_instance,
                 "aliases": [a.to_dict() for a in cfg.aliases],
                 "active_aliases": cfg.active_aliases,
                 "enabled": cfg.enabled,
@@ -626,7 +629,7 @@ def export_backup(request: Request) -> Response:
 def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
     import json
 
-    from app.models import Protocol
+    from app.models import DEFAULT_PORTS, Protocol
     from app.settings_store import DEFAULTS
 
     ctx = _ctx(request)
@@ -640,7 +643,8 @@ def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
             applied_settings += 1
 
     existing = {
-        (c.protocol.value, c.host, c.port, c.name) for c in ctx.db.list_connections()
+        (c.protocol.value, c.host, c.port, c.sql_instance or "", c.name)
+        for c in ctx.db.list_connections()
     }
     created = 0
     skipped = 0
@@ -652,17 +656,33 @@ def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
                 aliases_raw = json.dumps(item.get("aliases") or [])
             if not isinstance(aliases_raw, str):
                 aliases_raw = json.dumps(aliases_raw or [])
+            protocol = Protocol(item["protocol"])
+            sql_instance = (
+                item.get("sql_instance")
+                or item.get("instance")
+                or item.get("database_instance")
+                or None
+            )
+            sql_instance = str(sql_instance).strip() if sql_instance else None
+            raw_port = item.get("port")
+            if (raw_port is None or raw_port == "") and protocol is Protocol.SQLSERVER and sql_instance:
+                port = 0
+            elif raw_port is None or raw_port == "":
+                port = DEFAULT_PORTS[protocol]
+            else:
+                port = int(raw_port)
             cfg = ConnectionConfig(
                 id=None,
                 name=item["name"],
                 client=item.get("client", ""),
-                protocol=Protocol(item["protocol"]),
+                protocol=protocol,
                 host=item["host"],
-                port=int(item["port"]),
+                port=port,
                 username=item.get("username", ""),
                 auth_type=item.get("auth_type", "password"),
                 key_path=item.get("key_path"),
                 db_name=item.get("db_name"),
+                sql_instance=sql_instance,
                 ssl_mode=item.get("ssl_mode", "preferred"),
                 targets=json.loads(item.get("targets_json", "[]")),
                 aliases=parse_aliases_json(aliases_raw),
@@ -678,7 +698,7 @@ def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
         except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=[f"Conexión inválida en el backup: {exc}"])
         cfg.aliases = _merge_alias_metadata(cfg.aliases)
-        if (cfg.protocol.value, cfg.host, cfg.port, cfg.name) in existing:
+        if (cfg.protocol.value, cfg.host, cfg.port, cfg.sql_instance or "", cfg.name) in existing:
             skipped += 1
             continue
         if validate_connection(cfg):
@@ -689,7 +709,7 @@ def import_backup(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
             cfg.secret_encrypted = _encrypt_secret(ctx, plain_secret)
             secrets_imported += 1
         ctx.db.create_connection(cfg)
-        existing.add((cfg.protocol.value, cfg.host, cfg.port, cfg.name))
+        existing.add((cfg.protocol.value, cfg.host, cfg.port, cfg.sql_instance or "", cfg.name))
         created += 1
 
     return {

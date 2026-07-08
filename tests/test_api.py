@@ -100,6 +100,29 @@ def test_validation_errors_are_spanish_and_422(tmp_path):
     assert any("intervalo" in e.lower() for e in detail)
 
 
+def test_sqlserver_instance_can_be_saved_without_port(tmp_path):
+    client, ctx = make_client(tmp_path)
+    payload = dict(
+        PAYLOAD,
+        name="SQL SIGEVAS",
+        protocol="SQLSERVER",
+        host="10.128.2.11",
+        port=None,
+        sql_instance="sigevas2022",
+        targets=[],
+    )
+
+    resp = client.post("/api/connections", json=payload)
+
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["port"] == 0
+    assert body["sql_instance"] == "sigevas2022"
+    stored = ctx.db.get_connection(body["id"])
+    assert stored.sql_instance == "sigevas2022"
+    assert stored.port == 0
+
+
 def test_duplicate_starts_paused_and_keeps_secret(tmp_path):
     client, _ = make_client(tmp_path)
     cid = client.post("/api/connections", json=PAYLOAD).json()["id"]

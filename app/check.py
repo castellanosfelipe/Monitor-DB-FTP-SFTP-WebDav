@@ -13,7 +13,7 @@ JSON file keys (only ``protocol`` and ``host`` are required)::
       "auth_type": "password" | "key", "key_path": "C:/llaves/id_ed25519",
       "targets": ["/clientes/acme/entrada"],
       "timeout_s": 10, "ssl_mode": "preferred", "write_check": false,
-      "db_name": null, "health_query": null, "degraded_ms": null
+      "db_name": null, "sql_instance": null, "health_query": null, "degraded_ms": null
     }
 
 Exit codes: 0 = UP, 1 = DEGRADED, 2 = DOWN, 3 = configuration error.
@@ -42,17 +42,23 @@ def _config_from_file(path: Path) -> tuple[ConnectionConfig, str | None]:
     except (KeyError, ValueError):
         valid = ", ".join(p.value for p in Protocol)
         raise SystemExit(f"Protocolo inválido o ausente. Usa uno de: {valid}")
+    sql_instance = (data.get("sql_instance") or data.get("instance") or "").strip() or None
+    if data.get("port") in (None, "") and protocol is Protocol.SQLSERVER and sql_instance:
+        port = 0
+    else:
+        port = int(data.get("port") or DEFAULT_PORTS[protocol])
     cfg = ConnectionConfig(
         id=None,
         name=data.get("name", f"{protocol.value} {data.get('host', '?')}"),
         client=data.get("client", ""),
         protocol=protocol,
         host=data.get("host", ""),
-        port=int(data.get("port") or DEFAULT_PORTS[protocol]),
+        port=port,
         username=data.get("username", ""),
         auth_type=data.get("auth_type", "password"),
         key_path=data.get("key_path"),
         db_name=data.get("db_name"),
+        sql_instance=sql_instance,
         ssl_mode=data.get("ssl_mode", "preferred"),
         targets=list(data.get("targets", [])),
         health_query=data.get("health_query"),
