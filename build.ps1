@@ -85,6 +85,14 @@ $pyInstallerArgs += @(
     "--hidden-import", "win32crypt",
     "--hidden-import", "winotify",
     "--hidden-import", "winsound",
+    "--hidden-import", "cryptography",
+    "--hidden-import", "cryptography.hazmat.bindings._rust",
+    "--hidden-import", "cryptography.hazmat.backends.openssl.backend",
+    "--hidden-import", "cryptography.hazmat.primitives.asymmetric.rsa",
+    "--hidden-import", "cryptography.hazmat.primitives.ciphers",
+    "--hidden-import", "cryptography.hazmat.primitives.hashes",
+    "--hidden-import", "cryptography.hazmat.primitives.kdf.pbkdf2",
+    "--hidden-import", "cryptography.hazmat.primitives.serialization",
     "--hidden-import", "pystray",
     "--hidden-import", "pystray._win32",
     "--hidden-import", "PIL.Image",
@@ -93,14 +101,21 @@ $pyInstallerArgs += @(
     "--hidden-import", "PIL.ImageFont",
     "--hidden-import", "PIL.PdfImagePlugin",
     "--collect-submodules", "apscheduler",
-    "--collect-submodules", "oracledb"
+    "--collect-submodules", "oracledb",
+    "--collect-submodules", "cryptography"
 )
 
 & $py -m PyInstaller @pyInstallerArgs
 
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller fallo." }
 
-# 4. Scripts de instalación junto al ejecutable
+# 4. Smoke test del bundle congelado: Oracle thin requiere cryptography para
+#    autenticacion moderna; si PyInstaller lo omite, la app falla con DPY-3016.
+$selfTest = Start-Process -FilePath ".\dist\StabilityMonitor\StabilityMonitor.exe" `
+    -ArgumentList "--self-test" -Wait -PassThru -WindowStyle Hidden
+if ($selfTest.ExitCode -ne 0) { throw "El ejecutable no paso el self-test de dependencias." }
+
+# 5. Scripts de instalación junto al ejecutable
 Copy-Item install.ps1, uninstall.ps1 -Destination "dist\StabilityMonitor\"
 
 Write-Host ""

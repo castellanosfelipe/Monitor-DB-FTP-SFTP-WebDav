@@ -33,7 +33,30 @@ _ensure_standard_streams()
 
 from app.main import main
 
+
+def _run_self_test() -> int:
+    """Validate imports that PyInstaller can miss in the frozen bundle."""
+    import importlib
+
+    required_modules = (
+        "oracledb",
+        "cryptography",
+        "cryptography.hazmat.bindings._rust",
+        "cryptography.hazmat.backends.openssl.backend",
+        "cryptography.hazmat.primitives.asymmetric.rsa",
+        "cryptography.hazmat.primitives.ciphers",
+        "cryptography.hazmat.primitives.hashes",
+        "cryptography.hazmat.primitives.kdf.pbkdf2",
+        "cryptography.hazmat.primitives.serialization",
+    )
+    for module_name in required_modules:
+        importlib.import_module(module_name)
+    return 0
+
+
 if __name__ == "__main__":
     # Safe under PyInstaller onedir if anything ever spawns a subprocess.
     multiprocessing.freeze_support()
+    if "--self-test" in sys.argv[1:]:
+        raise SystemExit(_run_self_test())
     main()

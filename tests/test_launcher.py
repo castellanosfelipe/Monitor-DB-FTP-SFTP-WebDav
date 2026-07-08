@@ -20,6 +20,10 @@ def test_launcher_repairs_missing_standard_streams(monkeypatch):
     assert isinstance(sys.stderr.isatty(), bool)
 
 
+def test_launcher_self_test_imports_oracle_crypto_dependencies():
+    assert launcher._run_self_test() == 0
+
+
 def test_main_disables_uvicorn_default_logging_config(monkeypatch):
     from app import main as main_module
 

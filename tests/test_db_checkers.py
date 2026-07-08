@@ -80,6 +80,7 @@ def test_oracle_classification():
         "ORA-12514": ErrorType.DB_MISSING,
         "ORA-12541": ErrorType.TCP_CONNECT,
         "ORA-01031": ErrorType.PERMISSION,
+        "DPY-3016": ErrorType.PROTOCOL,
         "DPY-4024": ErrorType.QUERY_TIMEOUT,
         "DPY-6001": ErrorType.TCP_CONNECT,
     }
@@ -87,6 +88,8 @@ def test_oracle_classification():
         exc = oracledb.DatabaseError(SimpleNamespace(full_code=full_code, message="d"))
         hit = checker._classify(exc)
         assert hit is not None and hit[0] is expected, full_code
+    exc = oracledb.DatabaseError(SimpleNamespace(full_code="DPY-3016", message="d"))
+    assert "cryptography" in checker._classify(exc)[1]
 
 
 # --- common flow via a fake driver -------------------------------------------

@@ -33,6 +33,10 @@ _CODE_MAP: dict[str, tuple[ErrorType, str]] = {
     "DPY-4011": (ErrorType.TCP_CONNECT, "la conexión fue cerrada por el servidor"),
     "DPY-4024": (ErrorType.QUERY_TIMEOUT, "la consulta excedió call_timeout"),
     "ORA-03156": (ErrorType.QUERY_TIMEOUT, "la consulta excedió el tiempo límite"),
+    "DPY-3016": (
+        ErrorType.PROTOCOL,
+        "dependencia faltante en el ejecutable: cryptography no fue incluida; reinstala la V2 actualizada",
+    ),
 }
 
 
