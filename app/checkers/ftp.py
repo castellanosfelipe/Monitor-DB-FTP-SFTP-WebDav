@@ -105,7 +105,7 @@ class FtpChecker(BaseChecker):
     @staticmethod
     def _check_target(ftp: FTP, target: str) -> TargetResult:
         try:
-            ftp.cwd(target)
+            FtpChecker._cwd_with_encoding_fallback(ftp, target)
         except error_perm as exc:
             error_type, message = classify_target_error(exc)
             return TargetResult(target=target, ok=False, error_type=error_type, message=message)
@@ -123,6 +123,31 @@ class FtpChecker(BaseChecker):
             # CWD already proved the directory exists and is accessible.
             pass
         return TargetResult(target=target, ok=True)
+
+    @staticmethod
+    def _cwd_with_encoding_fallback(ftp: FTP, target: str) -> None:
+        """CWD a path, retrying legacy Windows encodings in the same session."""
+        original_encoding = ftp.encoding
+        tried: set[str] = set()
+        last_perm: error_perm | None = None
+        try:
+            for encoding in (original_encoding, *_FTP_CONTROL_ENCODINGS):
+                if encoding in tried:
+                    continue
+                tried.add(encoding)
+                ftp.encoding = encoding
+                try:
+                    ftp.cwd(target)
+                    return
+                except error_perm as exc:
+                    last_perm = exc
+                    if target.isascii():
+                        break
+                    continue
+            if last_perm is not None:
+                raise last_perm
+        finally:
+            ftp.encoding = original_encoding
 
     @staticmethod
     def _safe_nlst(ftp: FTP) -> None:
@@ -158,7 +183,7 @@ class FtpChecker(BaseChecker):
         label = f"{directory.rstrip('/')}/{PROBE_NAME} (escritura)"
         payload = BytesIO(f"stability-monitor probe {to_iso(utc_now())}\n".encode())
         try:
-            ftp.cwd(directory)
+            FtpChecker._cwd_with_encoding_fallback(ftp, directory)
             ftp.storbinary(f"STOR {PROBE_NAME}", payload)
         except error_perm as exc:
             return TargetResult(
